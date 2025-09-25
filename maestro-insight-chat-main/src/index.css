@@ -1,0 +1,150 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Sistema Pricing Inteligente Design System */
+
+@layer base {
+  :root {
+    /* Core Brand Colors - Intelligent Analytics Blue/Purple Palette */
+    --background: 0 0% 100%;
+    --foreground: 220 15% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 15% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 10%;
+
+    /* Primary Brand - Deep Tech Blue */
+    --primary: 220 70% 50%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 220 70% 65%;
+
+    /* Secondary - Analytics Purple */
+    --secondary: 270 50% 60%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Accent - Intelligence Green */
+    --accent: 160 60% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Success/Analytics Green */
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+
+    /* Warning/Processing Orange */
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    /* Muted tones */
+    --muted: 220 15% 96%;
+    --muted-foreground: 220 10% 40%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 90%;
+    --input: 220 15% 94%;
+    --ring: 220 70% 50%;
+
+    --radius: 0.75rem;
+
+    /* Gradients for modern tech feel */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)));
+    --gradient-secondary: linear-gradient(135deg, hsl(var(--secondary)), hsl(var(--primary)));
+    --gradient-accent: linear-gradient(135deg, hsl(var(--accent)), hsl(var(--secondary)));
+    --gradient-hero: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--secondary)) 50%, hsl(var(--accent)) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(var(--card)) 0%, hsl(var(--muted)) 100%);
+
+    /* Shadows with brand colors */
+    --shadow-primary: 0 10px 40px -10px hsl(var(--primary) / 0.2);
+    --shadow-secondary: 0 10px 40px -10px hsl(var(--secondary) / 0.2);
+    --shadow-glow: 0 0 40px hsl(var(--primary-glow) / 0.3);
+    --shadow-elevation: 0 20px 60px -10px hsl(220 15% 10% / 0.1);
+
+    /* Animations */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+    /* Sidebar */
+    --sidebar-background: 220 15% 98%;
+    --sidebar-foreground: 220 15% 15%;
+    --sidebar-primary: 220 70% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 15% 95%;
+    --sidebar-accent-foreground: 220 15% 15%;
+    --sidebar-border: 220 15% 88%;
+    --sidebar-ring: 220 70% 50%;
+  }
+
+  .dark {
+    /* Dark mode with tech/analytics theme */
+    --background: 220 25% 6%;
+    --foreground: 220 15% 95%;
+
+    --card: 220 20% 8%;
+    --card-foreground: 220 15% 95%;
+
+    --popover: 220 20% 8%;
+    --popover-foreground: 220 15% 95%;
+
+    --primary: 220 70% 60%;
+    --primary-foreground: 220 25% 6%;
+    --primary-glow: 220 70% 75%;
+
+    --secondary: 270 50% 65%;
+    --secondary-foreground: 220 25% 6%;
+
+    --accent: 160 60% 55%;
+    --accent-foreground: 220 25% 6%;
+
+    --success: 142 76% 45%;
+    --success-foreground: 220 25% 6%;
+
+    --warning: 38 92% 55%;
+    --warning-foreground: 220 25% 6%;
+
+    --muted: 220 20% 12%;
+    --muted-foreground: 220 15% 60%;
+
+    --destructive: 0 84% 65%;
+    --destructive-foreground: 220 25% 6%;
+
+    --border: 220 20% 15%;
+    --input: 220 20% 12%;
+    --ring: 220 70% 60%;
+
+    /* Dark gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)));
+    --gradient-secondary: linear-gradient(135deg, hsl(var(--secondary)), hsl(var(--primary)));
+    --gradient-accent: linear-gradient(135deg, hsl(var(--accent)), hsl(var(--secondary)));
+    --gradient-hero: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--secondary)) 50%, hsl(var(--accent)) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(var(--card)) 0%, hsl(var(--muted)) 100%);
+
+    /* Dark shadows with glow effects */
+    --shadow-primary: 0 10px 40px -10px hsl(var(--primary) / 0.4);
+    --shadow-secondary: 0 10px 40px -10px hsl(var(--secondary) / 0.4);
+    --shadow-glow: 0 0 60px hsl(var(--primary-glow) / 0.5);
+    --shadow-elevation: 0 20px 60px -10px hsl(220 25% 0% / 0.4);
+
+    --sidebar-background: 220 25% 8%;
+    --sidebar-foreground: 220 15% 90%;
+    --sidebar-primary: 220 70% 60%;
+    --sidebar-primary-foreground: 220 25% 6%;
+    --sidebar-accent: 220 20% 12%;
+    --sidebar-accent-foreground: 220 15% 90%;
+    --sidebar-border: 220 20% 15%;
+    --sidebar-ring: 220 70% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
