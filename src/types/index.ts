@@ -15,6 +15,40 @@ export interface ChatMessage {
   timestamp: string;
   evidences?: Evidence[];
   confidence?: number;
+
+  type?: 'text' | 'table' | 'aggregate';
+  items?: ProductRow[];
+  sources?: Array<{
+    id: string;
+    title: string;
+    score?: number;
+    url?: string;
+    snippet?: string;
+    source?: string;
+  }>;
+  result?: AggregateResult;
+}
+
+export interface ProductRow {
+  name: string;
+  brand: string;
+  store: string;
+  price: number;
+  currency: string;
+  url?: string;
+}
+
+export interface AggregateGroup {
+  key: string;
+  min?: number;
+  max?: number;
+  avg?: number;
+  count?: number;
+}
+
+export interface AggregateResult {
+  total?: number;
+  groups: AggregateGroup[];
 }
 
 export interface Evidence {

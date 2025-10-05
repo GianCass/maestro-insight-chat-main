@@ -131,21 +131,40 @@ const Chatbot = () => {
         threshold: confidenceThreshold[0]
       });
 
+      // const finalMessage: ChatMessage = {
+      //   id: tempAssistantId,
+      //   role: 'assistant',
+      //   content: response.message || 'No se recibió respuesta',
+      //   timestamp: new Date().toISOString(),
+      //   confidence: response.confidence,
+      //   evidences: (response.sources || []).map((source: any) => ({
+      //     id: source.id || Math.random().toString(),
+      //     title: source.title || 'Fuente',
+      //     score: source.score || 0,
+      //     url: source.url,
+      //     snippet: source.snippet,
+      //     source: source.source || 'API'
+      //   }))
+      // };
+
       const finalMessage: ChatMessage = {
-        id: tempAssistantId,
-        role: 'assistant',
-        content: response.message || 'No se recibió respuesta',
-        timestamp: new Date().toISOString(),
-        confidence: response.confidence,
-        evidences: (response.sources || []).map((source: any) => ({
-          id: source.id || Math.random().toString(),
-          title: source.title || 'Fuente',
-          score: source.score || 0,
-          url: source.url,
-          snippet: source.snippet,
-          source: source.source || 'API'
-        }))
-      };
+      id: tempAssistantId,
+      role: 'assistant',
+      content: response.message || 'No se recibió respuesta',
+      timestamp: new Date().toISOString(),
+      confidence: response.confidence,
+      evidences: (response.sources || []).map((source: any) => ({
+        id: source.id || Math.random().toString(),
+        title: source.title || 'Fuente',
+        score: source.score || 0,
+        url: source.url,
+        snippet: source.snippet,
+        source: source.source || 'API'
+      })),
+      type: response.type || 'text',
+      sources: response.sources || [],
+      result: response.result || undefined
+    };
 
       setMessages(prev => {
         const updated = prev.map(msg => msg.id === tempAssistantId ? finalMessage : msg);
@@ -409,6 +428,73 @@ const Chatbot = () => {
                             {message.evidences && message.evidences.length > 0 && (
                               <EvidenceChips evidences={message.evidences} />
                             )}
+
+
+                            {message.type === "table" && Array.isArray(message.items) && message.items.length > 0 && (
+                                <div className="mt-3 border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                                  <table className="min-w-full text-sm text-left border-collapse">
+                                    <thead className="bg-gray-100 text-gray-700">
+                                      <tr>
+                                        <th className="px-4 py-2">Producto</th>
+                                        <th className="px-4 py-2">Marca</th>
+                                        <th className="px-4 py-2">Tienda</th>
+                                        <th className="px-4 py-2 text-right">Precio</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {message.items?.map((item, idx) => (
+                                        <tr key={idx} className="border-t">
+                                          <td className="px-4 py-2">
+                                            <a
+                                              href={item.url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="text-blue-600 hover:underline"
+                                            >
+                                              {item.name}
+                                            </a>
+                                          </td>
+                                          <td className="px-4 py-2">{item.brand}</td>
+                                          <td className="px-4 py-2">{item.store}</td>
+                                          <td className="px-4 py-2 text-right font-semibold">
+                                            {item.price?.toLocaleString("es-CO")} {item.currency}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+
+
+                              {Array.isArray(message.sources) && message.sources.length > 0 && (
+                                <div className="mt-3 text-xs text-gray-600">
+                                  <p className="font-semibold mb-1">📚 Fuentes:</p>
+                                  <ul className="list-disc pl-5">
+                                    {message.sources?.map((src, i) => (
+                                      <li key={i}>
+                                        {src.url ? (
+                                          <a
+                                            href={src.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-blue-600 hover:underline"
+                                          >
+                                            {src.title}
+                                          </a>
+                                        ) : (
+                                          <span>{src.title}</span>
+                                        )}
+                                        {src.score && (
+                                          <span className="ml-2 text-gray-400">
+                                            ({(src.score * 100).toFixed(0)}% confianza)
+                                          </span>
+                                        )}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
 
                             {/* Model and planner info */}
                             <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">

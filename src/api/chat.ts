@@ -1,34 +1,9 @@
 import { getApiBase, authHeaders } from './config';
-import type { ChatMessage } from '@/types';
+import type { ChatMessage, ProductRow, AggregateResult } from '@/types';
 
 /* ===== Tipos del backend (FastAPI) ===== */
 
 export type ChatIntentType = 'text' | 'table' | 'aggregate';
-
-export interface ProductRow {
-  product_id: string;
-  name: string;
-  brand?: string;
-  size?: string | number;
-  unit?: string;
-  price: number;
-  currency: string;
-  store?: string;
-  country?: string;
-}
-
-export interface AggregateGroup {
-  key: string;         // store | category | country
-  min?: number;
-  max?: number;
-  avg?: number;
-  count?: number;
-}
-
-export interface AggregateResult {
-  total?: number;
-  groups: AggregateGroup[];
-}
 
 /** Lo que puede venir como evidencia/fuente desde el backend */
 type RawSource = {
@@ -96,6 +71,7 @@ export type ChatResponseUI = {
 const API = getApiBase();
 const CHAT_URL = `${API}/chat`;
 const CHAT_STREAM_URL = `${API}/chat/stream`;
+// const CHAT_STREAM_URL = `${API}/chat/stream`;
 
 async function checkChatStreamEndpoint(): Promise<boolean> {
   try {
