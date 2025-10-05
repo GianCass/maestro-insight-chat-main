@@ -1,12 +1,16 @@
 import { supabase } from '@/integrations/supabase/client';
 
-export function getApiBase(): string {
-  // Primero VITE_PUBLIC_API_BASE (Lovable/Prod), luego VITE_API_BASE (fallback), luego local
-  return (
-    import.meta.env.VITE_PUBLIC_API_BASE ??
-    import.meta.env.VITE_API_BASE ??
-    'http://127.0.0.1:8000'
-  );
+// export function getApiBase(): string {
+//   // Primero VITE_PUBLIC_API_BASE (Lovable/Prod), luego VITE_API_BASE (fallback), luego local
+//   return (
+//     import.meta.env.VITE_PUBLIC_API_BASE ??
+//     import.meta.env.VITE_API_BASE ??
+//     'http://127.0.0.1:8000'
+//   );
+// }
+
+export function getApiBase() {
+    return import.meta.env.VITE_PUBLIC_API_BASE || 'http://127.0.0.1:8000';
 }
 
 export async function authHeaders(): Promise<Record<string, string>> {

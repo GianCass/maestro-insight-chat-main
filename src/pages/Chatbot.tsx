@@ -8,12 +8,14 @@ import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Link } from "react-router-dom";
-import { 
-  Send, 
-  Bot, 
-  User, 
-  Settings, 
-  MessageSquare, 
+import { generatePlot } from "@/api/plotlyService";
+import { PlotlyChart } from "@/components/PlotlyChart";
+import {
+  Send,
+  Bot,
+  User,
+  Settings,
+  MessageSquare,
   Home,
   Plus,
   MoreVertical,
@@ -29,7 +31,7 @@ import { useAuth } from "@/hooks/useAuth";
 const Chatbot = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  
+
   // Session management
   const [sessionId] = useState(() => {
     const stored = localStorage.getItem('pricing-session');
@@ -42,7 +44,7 @@ const Chatbot = () => {
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     const stored = chatHistory.load(sessionId);
     if (stored.length > 0) return stored;
-    
+
     return [{
       id: '1',
       role: 'assistant',
@@ -59,6 +61,11 @@ const Chatbot = () => {
   const [confidenceThreshold, setConfidenceThreshold] = useState([0.7]);
   const [selectedModel, setSelectedModel] = useState('gpt-4');
   const [retryRequest, setRetryRequest] = useState<{ message: string } | null>(null);
+
+  const [figure, setFigure] = useState<any>(null);
+  const [figureQuery, setFigureQuery] = useState('');
+  const [isPlotLoading, setIsPlotLoading] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -95,7 +102,7 @@ const Chatbot = () => {
       chatHistory.save(sessionId, updated);
       return updated;
     });
-    
+
     if (!messageToSend) setCurrentMessage('');
     setIsLoading(true);
     setIsStreaming(false); // no usamos streaming real
@@ -148,11 +155,11 @@ const Chatbot = () => {
 
     } catch (error) {
       console.error('Chat request failed:', error);
-      
+
       // Quita el mensaje temporal y ofrece reintento
       setMessages(prev => prev.filter(msg => msg.id !== tempAssistantId));
       setRetryRequest({ message: messageText });
-      
+
       toast({
         title: "Error de conexión",
         description: "No se pudo conectar con el servidor. Verifica que el backend esté en http://127.0.0.1:8000 y tu .env del front tenga VITE_PUBLIC_API_BASE.",
@@ -180,7 +187,7 @@ const Chatbot = () => {
   const handleNewConversation = () => {
     const newSessionId = generateSessionId();
     localStorage.setItem('pricing-session', newSessionId);
-    
+
     const initialMessage: ChatMessage = {
       id: '1',
       role: 'assistant',
@@ -188,7 +195,7 @@ const Chatbot = () => {
       timestamp: new Date().toISOString(),
       confidence: 0.95
     };
-    
+
     setMessages([initialMessage]);
     chatHistory.clear(sessionId);
     window.location.reload(); // Reload to reset session
@@ -213,9 +220,9 @@ const Chatbot = () => {
         <AccordionContent>
           <div className="flex flex-wrap gap-2">
             {evidences.map(evidence => (
-              <Badge 
+              <Badge
                 key={evidence.id}
-                variant="outline" 
+                variant="outline"
                 className="flex items-center gap-1 cursor-pointer hover:bg-accent transition-colors"
                 onClick={() => evidence.url && window.open(evidence.url, '_blank')}
               >
@@ -230,6 +237,26 @@ const Chatbot = () => {
       </AccordionItem>
     </Accordion>
   );
+
+  const handleGeneratePlot = async () => {
+  if (!figureQuery.trim()) return;
+  setIsPlotLoading(true);
+  setFigure(null);
+
+  try {
+    const res = await generatePlot(figureQuery);
+    setFigure(res);
+  } catch (err) {
+    console.error("Error generando gráfica:", err);
+    toast({
+      title: "Error al generar visualización",
+      description: "No se pudo obtener la gráfica desde el servidor.",
+      variant: "destructive"
+    });
+  } finally {
+    setIsPlotLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-background">
@@ -263,8 +290,8 @@ const Chatbot = () => {
         <div className="w-80 border-r border-border bg-card/30 p-4">
           <div className="space-y-4">
             {/* New Chat Button */}
-            <Button 
-              className="w-full justify-start" 
+            <Button
+              className="w-full justify-start"
               variant="outline"
               onClick={handleNewConversation}
             >
@@ -280,7 +307,7 @@ const Chatbot = () => {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Modelo</label>
-                  <select 
+                  <select
                     value={selectedModel}
                     onChange={(e) => setSelectedModel(e.target.value)}
                     className="w-full p-2 border border-input rounded-md bg-background text-sm"
@@ -293,7 +320,7 @@ const Chatbot = () => {
 
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium">Modo Estricto</label>
-                  <Switch 
+                  <Switch
                     checked={strictMode}
                     onCheckedChange={setStrictMode}
                   />
@@ -324,7 +351,7 @@ const Chatbot = () => {
                   'Tendencias retail Europa',
                   'Comparativa productos tech'
                 ].map((title, index) => (
-                  <div 
+                  <div
                     key={index}
                     className="p-2 rounded-md hover:bg-accent cursor-pointer group flex items-center justify-between"
                   >
@@ -356,7 +383,7 @@ const Chatbot = () => {
                       </div>
                     </div>
                   )}
-                  
+
                   <div className={`max-w-2xl ${message.role === 'user' ? 'order-2' : ''}`}>
                     <Card className={`${message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-card'}`}>
                       <CardContent className="p-4">
@@ -368,7 +395,7 @@ const Chatbot = () => {
                             return <p key={index} className="mb-2">{line}</p>;
                           })}
                         </div>
-                        
+
                         {message.role === 'assistant' && (
                           <>
                             {message.confidence && (
@@ -378,11 +405,11 @@ const Chatbot = () => {
                                 </Badge>
                               </div>
                             )}
-                            
+
                             {message.evidences && message.evidences.length > 0 && (
                               <EvidenceChips evidences={message.evidences} />
                             )}
-                            
+
                             {/* Model and planner info */}
                             <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
                               <span>modelo: {selectedModel}</span>
@@ -402,7 +429,7 @@ const Chatbot = () => {
                   )}
                 </div>
               ))}
-              
+
               {isLoading && (
                 <div className="flex gap-4">
                   <div className="flex-shrink-0">
@@ -426,7 +453,7 @@ const Chatbot = () => {
                   </Card>
                 </div>
               )}
-              
+
               {retryRequest && (
                 <div className="flex gap-4">
                   <div className="flex-shrink-0">
@@ -438,8 +465,8 @@ const Chatbot = () => {
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Error al enviar mensaje</span>
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           size="sm"
                           onClick={() => handleSendMessage(retryRequest.message)}
                         >
@@ -452,6 +479,31 @@ const Chatbot = () => {
                 </div>
               )}
               <div ref={messagesEndRef} />
+              {/* Área de visualizaciones */}
+              <div className="border-t border-border bg-muted/30 p-4">
+                <div className="max-w-4xl mx-auto space-y-4">
+                  <h4 className="font-medium text-sm text-muted-foreground">
+                    Generar visualización dinámica
+                  </h4>
+                  <div className="flex gap-2">
+                    <Input
+                      value={figureQuery}
+                      onChange={(e) => setFigureQuery(e.target.value)}
+                      placeholder="Ejemplo: Mostrar la evolución de precios de los productos tecnológicos en Q2"
+                      className="flex-1"
+                    />
+                    <Button
+                      onClick={handleGeneratePlot}
+                      disabled={isPlotLoading || !figureQuery.trim()}
+                      variant="outline"
+                    >
+                      {isPlotLoading ? "Generando..." : "Visualizar"}
+                    </Button>
+                  </div>
+
+                  {figure && <PlotlyChart figure={figure} />}
+                </div>
+              </div>
             </div>
           </ScrollArea>
 
@@ -469,7 +521,7 @@ const Chatbot = () => {
                     disabled={isLoading}
                   />
                 </div>
-                <Button 
+                <Button
                   onClick={() => handleSendMessage()}
                   disabled={!currentMessage.trim() || isLoading}
                   variant="analytics"
