@@ -239,6 +239,24 @@ const Chatbot = () => {
       });
 
       for await (const part of stream) {
+      // ⬇️ Si el backend envía un prompt de visualización, disparamos Plotly
+          if (part.vizPrompt) {
+            setFigureQuery(part.vizPrompt);      // muestra el prompt en el input de la UI (opcional)
+            setIsPlotLoading(true);
+            // No bloqueamos el stream: disparamos en segundo plano
+            generatePlot(part.vizPrompt)
+              .then((fig) => setFigure(fig as PlotFigure))
+              .catch((err) => {
+                console.error("Error generando gráfica:", err);
+                toast({
+                  title: "No pude generar la visualización",
+                  description: "Revisa el prompt o el servicio de gráficas.",
+                  variant: "destructive",
+                });
+              })
+              .finally(() => setIsPlotLoading(false));
+          }
+  
         setMessages((prev) => {
           const next: UIMessage[] = prev.map((msg) => {
             if (msg.id !== tempAssistantId) return msg;

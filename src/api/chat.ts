@@ -15,6 +15,22 @@ export type RawSource = {
   source?: string;
 };
 
+// 👇 NUEVO
+export type ChatStreamPart = {
+  content?: string;
+  confidence?: number;
+  sources?: RawSource[];
+  type?: ChatIntentType;
+  items?: PriceTableItem[];
+  result?: unknown;
+  vizPrompt?: string; // <— NUEVO
+};
+
+
+
+
+
+
 export type PriceTableItem = {
   product_id?: string;
   name: string;
@@ -56,6 +72,7 @@ type StreamYield = {
   type?: ChatIntentType;
   items?: PriceTableItem[];
   result?: unknown;
+  vizPrompt?: string;
 };
 
 /* ======================= Utilidades ======================= */
@@ -173,6 +190,7 @@ export async function sendChatStream({
       type?: ChatIntentType;
       items?: PriceTableItem[];
       result?: unknown;
+      vizPrompt?: string;
     }> {
       try {
         for (;;) {
@@ -188,6 +206,12 @@ export async function sendChatStream({
           for (let line of lines) {
             line = line.replace(/^data:\s*/, "").trim();
             if (!line) continue;
+
+            if (line.startsWith("[VIZ_PROMPT]")) {
+              const vizPrompt = line.replace(/^\[VIZ_PROMPT\]\s*/, "");
+              yield { vizPrompt };
+              continue; 
+            }
 
             if (line === "[FIN]" || line === "[DONE]") {
               yield {
