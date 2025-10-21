@@ -1,12 +1,10 @@
-import { getApiBase, authHeaders } from './config';
-import type { ChatMessage, ProductRow, AggregateResult } from '@/types';
+import { getApiBase, authHeaders } from "./config";
+import type { ChatMessage } from "@/types";
 
-/* ===== Tipos del backend (FastAPI) ===== */
+/* ======================= Tipos ======================= */
+export type ChatIntentType = "text" | "table" | "aggregate";
 
-export type ChatIntentType = 'text' | 'table' | 'aggregate';
-
-/** Lo que puede venir como evidencia/fuente desde el backend */
-type RawSource = {
+export type RawSource = {
   id?: string;
   product_id?: string;
   title?: string;
@@ -15,233 +13,245 @@ type RawSource = {
   url?: string;
   snippet?: string;
   source?: string;
-  store?: string;
-  brand?: string;
-  size?: string | number;
-  unit?: string;
 };
 
-/** Respuesta cruda del backend para /chat */
-type ApiResp = {
-  // contenido
-  message?: string;        // normalizado en algunas rutas
-  reply?: string;          // algunas rutas devuelven "reply"
-  confidence?: number;
+export type PriceTableItem = {
+  product_id?: string;
+  name: string;
+  brand?: string;
+  store?: string;
+  price?: number;
+  currency?: string;
+  url?: string;
+};
 
-  // evidencia
+type ApiResp = {
+  message?: string;
+  reply?: string;
+  delta?: string;
+  content?: string;
+  confidence?: number;
   sources?: RawSource[];
   evidence?: RawSource[];
-
-  // tipos de resultado
   type?: ChatIntentType;
-
-  // table
-  count?: number;
-  items?: ProductRow[];
-
-  // aggregate
-  result?: AggregateResult;
+  items?: PriceTableItem[];
+  result?: unknown;
 };
 
-export interface ChatRequest {
+export type ChatRequest = {
   message: string;
-  sessionId?: string;
+  sessionId: string;
   strict?: boolean;
   threshold?: number;
-}
-
-/** Tipo ya normalizado para la UI */
-export type ChatResponseUI = {
-  message: string;
-  confidence?: number;
-  sources?: Array<{
-    id: string;
-    title: string;
-    score?: number;
-    url?: string;
-    snippet?: string;
-    source?: string;
-  }>;
-  type?: ChatIntentType;
-  count?: number;
-  items?: ProductRow[];
-  result?: AggregateResult;
 };
 
-const API = getApiBase();
-const CHAT_URL = `${API}/chat`;
-const CHAT_STREAM_URL = `${API}/chat/stream`;
-// const CHAT_STREAM_URL = `${API}/chat/stream`;
+export type ChatStreamRequest = ChatRequest & {
+  signal?: AbortSignal;
+};
 
-async function checkChatStreamEndpoint(): Promise<boolean> {
-  try {
-    const r = await fetch(CHAT_STREAM_URL, { method: 'OPTIONS', headers: await authHeaders() });
-    return r.ok;
-  } catch {
-    return false;
-  }
-}
+type StreamYield = {
+  content?: string;
+  confidence?: number;
+  sources?: RawSource[];
+  type?: ChatIntentType;
+  items?: PriceTableItem[];
+  result?: unknown;
+};
 
-function normalizeChatResponse(data: ApiResp): ChatResponseUI {
-  const rawSources = data.sources ?? data.evidence ?? [];
-  const sources = Array.isArray(rawSources)
-    ? rawSources.map((s: RawSource) => ({
-        id: s.id ?? s.product_id ?? crypto.randomUUID(),
-        title: s.title ?? s.name ?? 'Fuente',
-        score: s.score ?? 0,
-        url: s.url,
-        snippet: s.snippet ?? [s.brand, s.size, s.unit].filter(Boolean).join(' '),
-        source: s.source ?? s.store ?? 'API',
-      }))
-    : [];
+/* ======================= Utilidades ======================= */
+export const generateSessionId = () =>
+  "sid-" + Math.random().toString(36).slice(2) + "-" + Date.now().toString(36);
+
+export const chatHistory = {
+  load(sessionId: string): ChatMessage[] {
+    try {
+      const raw = localStorage.getItem(`chat-${sessionId}`);
+      return raw ? (JSON.parse(raw) as ChatMessage[]) : [];
+    } catch {
+      return [];
+    }
+  },
+  save(sessionId: string, messages: ChatMessage[]) {
+    localStorage.setItem(`chat-${sessionId}`, JSON.stringify(messages));
+  },
+  clear(sessionId: string) {
+    localStorage.removeItem(`chat-${sessionId}`);
+  },
+};
+
+/* ======================= /chat (no stream) ======================= */
+export async function sendChat({
+  message,
+  sessionId,
+  strict,
+  threshold,
+}: ChatRequest) {
+  // ⬇⬇ ESTE ES EL CAMBIO CLAVE: esperar los headers antes de usarlos
+  const extraHeaders = await authHeaders();
+
+  const resp = await fetch(`${getApiBase()}/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...extraHeaders, // ⬅ ya NO es una Promise
+    },
+    body: JSON.stringify({
+      message,
+      session_id: sessionId,
+      strict: !!strict,
+      threshold,
+    }),
+  });
+
+  if (!resp.ok) throw new Error(`HTTP ${resp.status} al llamar /chat`);
+
+  const data = (await resp.json()) as ApiResp;
 
   return {
-    message: data.message ?? data.reply ?? '',
+    message: data.message ?? data.reply ?? data.content ?? "",
     confidence: data.confidence,
-    sources,
+    sources: (data.sources ?? data.evidence) || [],
     type: data.type,
-    count: data.count,
     items: data.items,
     result: data.result,
   };
 }
 
-export async function sendChat(req: ChatRequest): Promise<ChatResponseUI> {
-  // (opcional) intento de stream si existe /chat/stream
-  const canStream = await checkChatStreamEndpoint();
-  if (canStream) {
-    try {
-      const res = await fetch(CHAT_STREAM_URL, {
-        method: 'POST',
-        headers: await authHeaders(),
-        body: JSON.stringify({
-          message: req.message,
-          session_id: req.sessionId,
-          metadata: { source: 'lovable', ui: 'chatbot', strict: !!req.strict, threshold: req.threshold ?? 0.7 },
-        }),
-      });
 
-      if (res.ok && res.body) {
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let acc = '';
-        const meta: { confidence?: number; sources?: RawSource[] } = {};
+/* ======================= /chat/stream (SSE / ReadableStream) ======================= */
+export async function sendChatStream({
+  message,
+  sessionId,
+  strict,
+  threshold,
+  signal,
+}: ChatStreamRequest) {
+  // ⬇⬇ IGUAL: esperar los headers
+  const extraHeaders = await authHeaders();
 
-        while (true) {
+  const resp = await fetch(`${getApiBase()}/chat/stream`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+      ...extraHeaders, // ⬅ ya NO es una Promise
+    },
+    body: JSON.stringify({
+      message,
+      session_id: sessionId,
+      strict: !!strict,
+      threshold,
+    }),
+    signal,
+  });
+
+  if (!resp.ok || !resp.body) {
+    throw new Error(
+      `No se pudo abrir el stream: HTTP ${resp.status} / body=${!!resp.body}`
+    );
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+
+  let accText = "";
+  const meta: {
+    confidence?: number;
+    sources?: RawSource[];
+    type?: ChatIntentType;
+    items?: PriceTableItem[];
+    result?: unknown;
+  } = {};
+
+  let pending = "";
+
+  return {
+    async *[Symbol.asyncIterator](): AsyncIterator<{
+      content?: string;
+      confidence?: number;
+      sources?: RawSource[];
+      type?: ChatIntentType;
+      items?: PriceTableItem[];
+      result?: unknown;
+    }> {
+      try {
+        for (;;) {
           const { value, done } = await reader.read();
           if (done) break;
 
           const chunk = decoder.decode(value, { stream: true });
-          for (const line of chunk.split('\n')) {
-            const raw = line.replace(/^data:\s*/, '').trim();
-            if (!raw) continue;
+          pending += chunk;
+
+          const lines = pending.split(/\r?\n/);
+          pending = lines.pop() ?? "";
+
+          for (let line of lines) {
+            line = line.replace(/^data:\s*/, "").trim();
+            if (!line) continue;
+
+            if (line === "[FIN]" || line === "[DONE]") {
+              yield {
+                content: accText,
+                confidence: meta.confidence,
+                sources: meta.sources,
+                type: meta.type,
+                items: meta.items,
+                result: meta.result,
+              };
+              return;
+            }
 
             try {
-              const j = JSON.parse(raw) as ApiResp;
-              if (j.message) acc += j.message;
-              if (j.reply) acc += j.reply;
+              const j = JSON.parse(line) as Partial<ApiResp>;
+              const token =
+                j.delta ?? j.content ?? j.message ?? j.reply ?? "";
+
+              if (token) {
+                accText += token;
+                yield { content: accText };
+              }
+
               if (j.confidence !== undefined) meta.confidence = j.confidence;
-              if (j.sources || j.evidence) meta.sources = (j.sources ?? j.evidence) as RawSource[];
+              if (j.sources || j.evidence)
+                meta.sources = (j.sources ?? j.evidence) ?? undefined;
+              if (j.type) meta.type = j.type;
+              if (j.items) meta.items = j.items;
+              if (j.result) meta.result = j.result;
             } catch {
-              acc += raw; // texto suelto
+              accText += line;
+              yield { content: accText };
+
+              if (/\[(FIN|DONE)\]\s*$/.test(line)) {
+                yield {
+                  content: accText.replace(/\s*\[(FIN|DONE)\]\s*$/, ""),
+                  confidence: meta.confidence,
+                  sources: meta.sources,
+                  type: meta.type,
+                  items: meta.items,
+                  result: meta.result,
+                };
+                return;
+              }
             }
           }
         }
-
-        return normalizeChatResponse({
-          message: acc,
-          confidence: meta.confidence,
-          sources: meta.sources ?? [],
-        });
+      } finally {
+        try {
+          reader.releaseLock();
+        } catch (_err) {
+          // ignoramos: el stream pudo cerrarse ya
+        }
       }
-    } catch {
-      // si falla el stream, cae a no-stream
-    }
-  }
 
-  // Fallback a POST /chat (no-stream)
-  try {
-    const resp = await fetch(CHAT_URL, {
-      method: 'POST',
-      headers: await authHeaders(),
-      body: JSON.stringify({
-        message: req.message,
-        session_id: req.sessionId,
-        metadata: { source: 'lovable', ui: 'chatbot', strict: !!req.strict, threshold: req.threshold ?? 0.7 },
-      }),
-    });
-
-    if (!resp.ok) {
-      const txt = await resp.text().catch(() => '');
-      throw new Error(`Chat request failed: ${resp.status} ${resp.statusText} ${txt}`);
-    }
-
-    const data = (await resp.json().catch(() => ({}))) as ApiResp;
-    return normalizeChatResponse(data);
-  } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : String(error);
-    if (msg.includes('Failed to fetch')) {
-      throw new Error('No se pudo conectar con el servidor. Verifica VITE_PUBLIC_API_BASE y CORS en el backend.');
-    }
-    throw error;
-  }
-}
-
-/* ===== Historial (tipado con ChatMessage) ===== */
-
-export function generateSessionId(): string {
-  return crypto.randomUUID();
-}
-
-export const chatHistory = {
-  save(sessionId: string, messages: ChatMessage[]) {
-    try {
-      const limited = messages.slice(-50);
-      localStorage.setItem(`pricing-chat:${sessionId}`, JSON.stringify(limited));
-    } catch (err) {
-      console.warn('Error saving chat history:', err);
-    }
-  },
-
-  load(sessionId: string): ChatMessage[] {
-    try {
-      const stored = localStorage.getItem(`pricing-chat:${sessionId}`);
-      if (!stored) return [];
-      const parsed = JSON.parse(stored) as unknown;
-      return Array.isArray(parsed) ? (parsed as ChatMessage[]) : [];
-    } catch (err) {
-      console.warn('Error loading chat history:', err);
-      return [];
-    }
-  },
-
-  clear(sessionId: string) {
-    try {
-      localStorage.removeItem(`pricing-chat:${sessionId}`);
-    } catch (err) {
-      console.warn('Error clearing chat history:', err);
-    }
-  },
-};
-
-/* ===== (Opcional/legacy) Wrapper de "stream" para compatibilidad ===== */
-
-export interface ChatStreamRequest {
-  message: string;
-  sessionId: string;
-  strict?: boolean;
-  threshold?: number;
-}
-
-export async function sendChatStream({ message, sessionId, strict, threshold }: ChatStreamRequest) {
-  const result = await sendChat({ message, sessionId, strict, threshold });
-  return {
-    async *[Symbol.asyncIterator]() {
       yield {
-        content: result.message,
-        confidence: result.confidence,
-        sources: result.sources,
+        content: accText,
+        confidence: meta.confidence,
+        sources: meta.sources,
+        type: meta.type,
+        items: meta.items,
+        result: meta.result,
       };
     },
   };
 }
+
