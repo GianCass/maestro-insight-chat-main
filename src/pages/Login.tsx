@@ -29,12 +29,13 @@ const Login = () => {
   const { toast } = useToast();
 
   useEffect(() => {
+    document.title = "Login - SPI";
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
+
         // If user is authenticated, redirect to dashboard
         if (session?.user) {
           navigate("/dashboard");
@@ -46,7 +47,7 @@ const Login = () => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       // If already logged in, redirect to dashboard
       if (session?.user) {
         navigate("/dashboard");
@@ -117,10 +118,10 @@ const Login = () => {
                     <FormItem>
                       <FormLabel>Email</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="tu@email.com" 
+                        <Input
+                          placeholder="tu@email.com"
                           type="email"
-                          {...field} 
+                          {...field}
                         />
                       </FormControl>
                       <FormMessage />
@@ -136,10 +137,10 @@ const Login = () => {
                       <FormLabel>Contraseña</FormLabel>
                       <FormControl>
                         <div className="relative">
-                          <Input 
-                            placeholder="••••••••" 
+                          <Input
+                            placeholder="••••••••"
                             type={showPassword ? "text" : "password"}
-                            {...field} 
+                            {...field}
                           />
                           <Button
                             type="button"
@@ -161,9 +162,9 @@ const Login = () => {
                   )}
                 />
 
-                <Button 
-                  type="submit" 
-                  className="w-full" 
+                <Button
+                  type="submit"
+                  className="w-full"
                   disabled={isLoading}
                   variant="default"
                 >
@@ -174,8 +175,8 @@ const Login = () => {
 
             <div className="mt-6 text-center text-sm">
               <span className="text-muted-foreground">¿No tienes una cuenta? </span>
-              <Link 
-                to="/register" 
+              <Link
+                to="/register"
                 className="text-primary hover:text-primary/80 font-medium transition-colors"
               >
                 Registrarse
@@ -183,8 +184,8 @@ const Login = () => {
             </div>
 
             <div className="mt-4 text-center">
-              <Link 
-                to="/support" 
+              <Link
+                to="/support"
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 ¿Necesitas ayuda?

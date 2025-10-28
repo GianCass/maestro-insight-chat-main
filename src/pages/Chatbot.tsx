@@ -27,6 +27,7 @@ import {
   ExternalLink,
   RefreshCw,
   AlertCircle,
+  Brain,
 } from "lucide-react";
 
 import type {
@@ -159,7 +160,7 @@ const Chatbot = () => {
         id: "1",
         role: "assistant",
         content:
-          "¡Hola! Soy tu asistente de análisis de retail. Puedo ayudarte con datos de precios, tendencias del mercado y análisis de productos. ¿En qué puedo ayudarte hoy?",
+          "¡Hola! Soy Pricy, tu asistente de análisis de retail. Puedo ayudarte con datos de precios, tendencias del mercado y análisis de productos. ¿En qué puedo ayudarte hoy?",
         timestamp: new Date().toISOString(),
         confidence: 0.95,
       },
@@ -173,7 +174,7 @@ const Chatbot = () => {
   const [confidenceThreshold, setConfidenceThreshold] = useState<number[]>([
     0.7,
   ]);
-  const [selectedModel, setSelectedModel] = useState("gpt-4");
+  const [selectedModel, setSelectedModel] = useState("llama 3:8b");
   const [retryRequest, setRetryRequest] = useState<{ message: string } | null>(
     null
   );
@@ -256,7 +257,7 @@ const Chatbot = () => {
               })
               .finally(() => setIsPlotLoading(false));
           }
-  
+
         setMessages((prev) => {
           const next: UIMessage[] = prev.map((msg) => {
             if (msg.id !== tempAssistantId) return msg;
@@ -343,6 +344,7 @@ const Chatbot = () => {
   };
 
   useEffect(() => {
+    document.title = "Chatbot - SPI";
     if (messages.length > 1) {
       chatHistory.save(sessionId, messages);
     }
@@ -410,8 +412,8 @@ const Chatbot = () => {
               </Button>
             </Link>
             <div className="flex items-center space-x-2">
-              <Bot className="h-6 w-6 text-primary" />
-              <span className="text-lg font-semibold">Chatbot IA</span>
+              <Brain className="h-6 w-6 text-primary" />
+              <span className="text-lg font-semibold">Chatbot SPI</span>
             </div>
           </div>
           <div className="flex items-center space-x-2">
@@ -438,47 +440,9 @@ const Chatbot = () => {
               Nueva Conversación
             </Button>
 
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Configuración</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Modelo</label>
-                  <select
-                    value={selectedModel}
-                    onChange={(e) => setSelectedModel(e.target.value)}
-                    className="w-full p-2 border border-input rounded-md bg-background text-sm"
-                  >
-                    <option value="gpt-4">GPT-4 (Recomendado)</option>
-                    <option value="gpt-3.5">GPT-3.5 Turbo</option>
-                    <option value="claude">Claude-3</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium">Modo Estricto</label>
-                  <Switch checked={strictMode} onCheckedChange={setStrictMode} />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    Umbral de Confianza: {(confidenceThreshold[0] * 100).toFixed(0)}%
-                  </label>
-                  <Slider
-                    value={confidenceThreshold}
-                    onValueChange={(val) => setConfidenceThreshold(val)}
-                    max={1}
-                    min={0.1}
-                    step={0.05}
-                    className="w-full"
-                  />
-                </div>
-              </CardContent>
-            </Card>
 
             <div>
-              <h3 className="text-sm font-medium mb-3">Historial Reciente</h3>
+              <h3 className="text-sm font-medium mb-3">Chats Recientes</h3>
               <div className="space-y-2">
                 {["Análisis de precios Q4", "Tendencias retail Europa", "Comparativa productos tech"].map(
                   (title, index) => (
@@ -721,9 +685,9 @@ const Chatbot = () => {
               <div ref={messagesEndRef} />
 
               {/* Área de visualizaciones */}
-              <div className="border-t border-border bg-muted/30 p-4">
+              <div className="border-t border-border p-4">
                 <div className="max-w-4xl mx-auto space-y-4">
-                  <h4 className="font-medium text-sm text-muted-foreground">
+                  {/* <h4 className="font-medium text-sm text-muted-foreground">
                     Generar visualización dinámica
                   </h4>
                   <div className="flex gap-2">
@@ -740,7 +704,7 @@ const Chatbot = () => {
                     >
                       {isPlotLoading ? "Generando..." : "Visualizar"}
                     </Button>
-                  </div>
+                  </div> */}
 
                   {figure && <PlotlyChart figure={figure} />}
                 </div>

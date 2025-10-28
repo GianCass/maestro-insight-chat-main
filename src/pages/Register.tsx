@@ -36,12 +36,13 @@ const Register = () => {
   const { toast } = useToast();
 
   useEffect(() => {
+    document.title = "Registro - SPI";
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
+
         // If user is authenticated, redirect to dashboard
         if (session?.user) {
           navigate("/dashboard");
@@ -53,7 +54,7 @@ const Register = () => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       // If already logged in, redirect to dashboard
       if (session?.user) {
         navigate("/dashboard");
@@ -87,7 +88,7 @@ const Register = () => {
       }, 2000);
     } catch (error) {
       let errorMessage = "No se pudo crear la cuenta";
-      
+
       if (error instanceof Error) {
         if (error.message.includes("already registered")) {
           errorMessage = "Este email ya está registrado. Intenta iniciar sesión.";
@@ -95,7 +96,7 @@ const Register = () => {
           errorMessage = error.message;
         }
       }
-      
+
       toast({
         title: "Error al registrarse",
         description: errorMessage,
@@ -158,9 +159,9 @@ const Register = () => {
                     <FormItem>
                       <FormLabel>Nombre completo</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="Tu nombre completo" 
-                          {...field} 
+                        <Input
+                          placeholder="Tu nombre completo"
+                          {...field}
                         />
                       </FormControl>
                       <FormMessage />
@@ -175,10 +176,10 @@ const Register = () => {
                     <FormItem>
                       <FormLabel>Email</FormLabel>
                       <FormControl>
-                        <Input 
-                          placeholder="tu@email.com" 
+                        <Input
+                          placeholder="tu@email.com"
                           type="email"
-                          {...field} 
+                          {...field}
                         />
                       </FormControl>
                       <FormMessage />
@@ -194,10 +195,10 @@ const Register = () => {
                       <FormLabel>Contraseña</FormLabel>
                       <FormControl>
                         <div className="relative">
-                          <Input 
-                            placeholder="••••••••" 
+                          <Input
+                            placeholder="••••••••"
                             type={showPassword ? "text" : "password"}
-                            {...field} 
+                            {...field}
                           />
                           <Button
                             type="button"
@@ -227,10 +228,10 @@ const Register = () => {
                       <FormLabel>Confirmar contraseña</FormLabel>
                       <FormControl>
                         <div className="relative">
-                          <Input 
-                            placeholder="••••••••" 
+                          <Input
+                            placeholder="••••••••"
                             type={showConfirmPassword ? "text" : "password"}
-                            {...field} 
+                            {...field}
                           />
                           <Button
                             type="button"
@@ -252,9 +253,9 @@ const Register = () => {
                   )}
                 />
 
-                <Button 
-                  type="submit" 
-                  className="w-full" 
+                <Button
+                  type="submit"
+                  className="w-full"
                   disabled={isLoading}
                   variant="default"
                 >
@@ -265,8 +266,8 @@ const Register = () => {
 
             <div className="mt-6 text-center text-sm">
               <span className="text-muted-foreground">¿Ya tienes una cuenta? </span>
-              <Link 
-                to="/login" 
+              <Link
+                to="/login"
                 className="text-primary hover:text-primary/80 font-medium transition-colors"
               >
                 Iniciar sesión
@@ -274,8 +275,8 @@ const Register = () => {
             </div>
 
             <div className="mt-4 text-center">
-              <Link 
-                to="/support" 
+              <Link
+                to="/support"
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 ¿Necesitas ayuda?

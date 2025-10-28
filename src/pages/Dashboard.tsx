@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +9,7 @@ import { Slider } from "@/components/ui/slider";
 import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { sendDashboardQuery, sendDashboardQueryStream } from "@/api/dashboard";
-import { 
+import {
   Home,
   TrendingUp,
   Users,
@@ -25,7 +25,8 @@ import {
   MessageSquare,
   Globe,
   Database,
-  Zap
+  Zap,
+  Brain
 } from "lucide-react";
 import {
   LineChart as RechartsLineChart,
@@ -41,12 +42,17 @@ import {
   Cell,
   Pie
 } from 'recharts';
+import Footer from "@/components/Footer";
 
 const Dashboard = () => {
   const { toast } = useToast();
   const [timeRange, setTimeRange] = useState('7d');
   const [selectedCountry, setSelectedCountry] = useState('all');
-  
+
+  useEffect(() => {
+    document.title = "Dashboard General - SPI";
+  }, []);
+
   // Dashboard query functionality
   const [queryText, setQueryText] = useState('');
   const [queryThreshold, setQueryThreshold] = useState([0.7]);
@@ -118,7 +124,7 @@ const Dashboard = () => {
 
       for await (const chunk of stream) {
         buffer += chunk;
-        
+
         // Parse streaming data
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
@@ -127,7 +133,7 @@ const Dashboard = () => {
           if (line.trim()) {
             try {
               const data = JSON.parse(line.replace(/^data: /, ''));
-              
+
               if (data.results) {
                 accumulatedResults = [...accumulatedResults, ...data.results];
                 setQueryResults(accumulatedResults);
@@ -144,7 +150,7 @@ const Dashboard = () => {
 
     } catch (error) {
       console.error('Streaming failed, trying regular query:', error);
-      
+
       try {
         // Fallback to regular query
         const response = await sendDashboardQuery({
@@ -158,7 +164,7 @@ const Dashboard = () => {
 
       } catch (fallbackError) {
         console.error('Both streaming and regular query failed:', fallbackError);
-        
+
         toast({
           title: "Error en la consulta",
           description: "No se pudo conectar con el servidor para realizar la consulta.",
@@ -183,8 +189,9 @@ const Dashboard = () => {
                 </Button>
               </Link>
               <div className="flex items-center space-x-2">
-                <BarChart3 className="h-6 w-6 text-primary" />
-                <span className="text-lg font-semibold">Dashboard Analytics</span>
+                <Brain className="h-6 w-6 text-primary" />
+                <span className="text-lg font-semibold">Dashboard General</span>
+                <span className="text-lg font-semibold">- SPI</span>
               </div>
             </div>
             <div className="flex items-center space-x-2">
@@ -194,7 +201,7 @@ const Dashboard = () => {
                   Chatbot
                 </Button>
               </Link>
-              
+
               {/* Dashboard Query Section */}
               <div className="flex items-center space-x-2 ml-4">
                 <Input
@@ -204,7 +211,7 @@ const Dashboard = () => {
                   className="w-64"
                   onKeyPress={(e) => e.key === 'Enter' && handleDashboardQuery()}
                 />
-                <Button 
+                <Button
                   onClick={handleDashboardQuery}
                   disabled={!queryText.trim() || isQuerying}
                   variant="default"
@@ -221,8 +228,7 @@ const Dashboard = () => {
       </header>
 
       <div className="container mx-auto px-4 py-6">
-        {/* Controls */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        {/* <div className="flex flex-col sm:flex-row gap-4 mb-6">
           <div className="flex items-center space-x-2">
             <label className="text-sm font-medium">Período:</label>
             <Select value={timeRange} onValueChange={setTimeRange}>
@@ -237,7 +243,7 @@ const Dashboard = () => {
               </SelectContent>
             </Select>
           </div>
-          
+
           <div className="flex items-center space-x-2">
             <label className="text-sm font-medium">País:</label>
             <Select value={selectedCountry} onValueChange={setSelectedCountry}>
@@ -255,7 +261,7 @@ const Dashboard = () => {
           </div>
 
           <div className="flex-1"></div>
-          
+
           <div className="flex items-center space-x-2">
             <label className="text-sm font-medium">Umbral:</label>
             <div className="w-32">
@@ -272,18 +278,18 @@ const Dashboard = () => {
               {(queryThreshold[0] * 100).toFixed(0)}%
             </span>
           </div>
-          
+
           <Button variant="outline">
             <Download className="h-4 w-4 mr-2" />
             Exportar CSV
           </Button>
-        </div>
+        </div> */}
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           <Card className="bg-gradient-card border-0 shadow-elevation">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Consultas</CardTitle>
+              <CardTitle className="text-sm font-medium">Total Consultas SPI</CardTitle>
               <MessageSquare className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
@@ -295,37 +301,10 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-card border-0 shadow-elevation">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Sin Datos</CardTitle>
-              <Database className="h-4 w-4 text-warning" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{kpiData.noDataPercentage}%</div>
-              <Badge variant="outline" className="mt-2">
-                <TrendingUp className="h-3 w-3 mr-1" />
-                -2.1%
-              </Badge>
-            </CardContent>
-          </Card>
 
           <Card className="bg-gradient-card border-0 shadow-elevation">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Latencia P50</CardTitle>
-              <Zap className="h-4 w-4 text-accent" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{kpiData.averageLatency}ms</div>
-              <Badge variant="outline" className="mt-2">
-                <TrendingUp className="h-3 w-3 mr-1" />
-                -5.3%
-              </Badge>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-card border-0 shadow-elevation">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Latencia P95</CardTitle>
+              <CardTitle className="text-sm font-medium">Numero de Consultas</CardTitle>
               <Clock className="h-4 w-4 text-secondary" />
             </CardHeader>
             <CardContent>
@@ -339,7 +318,7 @@ const Dashboard = () => {
 
           <Card className="bg-gradient-card border-0 shadow-elevation">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">CTR Evidencia</CardTitle>
+              <CardTitle className="text-sm font-medium">CTR Preguntas Respondidas</CardTitle>
               <Target className="h-4 w-4 text-success" />
             </CardHeader>
             <CardContent>
@@ -380,7 +359,7 @@ const Dashboard = () => {
                       </CardContent>
                     </Card>
                   </div>
-                  
+
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse border border-border">
                       <thead>
@@ -409,7 +388,7 @@ const Dashboard = () => {
                   </div>
                 </div>
               )}
-              
+
               {queryChart && (
                 <div className="mt-4">
                   <h4 className="text-lg font-semibold mb-2">Gráfico de Resultados</h4>
@@ -426,11 +405,10 @@ const Dashboard = () => {
 
         {/* Charts Section */}
         <Tabs defaultValue="timeseries" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="timeseries">Series Temporales</TabsTrigger>
             <TabsTrigger value="intents">Intenciones</TabsTrigger>
             <TabsTrigger value="products">Productos</TabsTrigger>
-            <TabsTrigger value="sessions">Sesiones</TabsTrigger>
           </TabsList>
 
           <TabsContent value="timeseries" className="space-y-4">
@@ -439,7 +417,7 @@ const Dashboard = () => {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <LineChart className="h-5 w-5 text-primary" />
-                    Consultas por Hora
+                    Sus Consultas por Hora
                   </CardTitle>
                   <CardDescription>Volumen de consultas a lo largo del día</CardDescription>
                 </CardHeader>
@@ -450,10 +428,10 @@ const Dashboard = () => {
                       <XAxis dataKey="time" />
                       <YAxis />
                       <Tooltip />
-                      <Line 
-                        type="monotone" 
-                        dataKey="queries" 
-                        stroke="#3b82f6" 
+                      <Line
+                        type="monotone"
+                        dataKey="queries"
+                        stroke="#3b82f6"
                         strokeWidth={3}
                         dot={{ fill: '#3b82f6', strokeWidth: 2, r: 4 }}
                       />
@@ -466,20 +444,58 @@ const Dashboard = () => {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <BarChart3 className="h-5 w-5 text-secondary" />
-                    Latencia Promedio
+                    Sus ultimas consultas
                   </CardTitle>
-                  <CardDescription>Tiempo de respuesta a lo largo del día</CardDescription>
+                  <CardDescription>Aca estan las 5 ultimas consultas que ha realizado</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <RechartsBarChart data={timeseriesData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="time" />
-                      <YAxis />
-                      <Tooltip />
-                      <Bar dataKey="latency" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                    </RechartsBarChart>
-                  </ResponsiveContainer>
+                  <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: 'black' }}
+                          ></div>
+                          <span className="font-medium">Consulta 1</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: 'black' }}
+                          ></div>
+                          <span className="font-medium">Consulta 2</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: 'black' }}
+                          ></div>
+                          <span className="font-medium">Consulta 3</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: 'black' }}
+                          ></div>
+                          <span className="font-medium">Consulta 4</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: 'black' }}
+                          ></div>
+                          <span className="font-medium">Consulta 5</span>
+                        </div>
+                      </div>
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -527,8 +543,8 @@ const Dashboard = () => {
                     {intentData.map((intent, index) => (
                       <div key={intent.intent} className="flex items-center justify-between">
                         <div className="flex items-center space-x-3">
-                          <div 
-                            className="w-3 h-3 rounded-full" 
+                          <div
+                            className="w-3 h-3 rounded-full"
                             style={{ backgroundColor: COLORS[index] }}
                           ></div>
                           <span className="font-medium">{intent.intent}</span>
@@ -577,50 +593,9 @@ const Dashboard = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="sessions" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Sesiones Recientes</CardTitle>
-                <CardDescription>Últimas consultas procesadas por el sistema</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 mb-4">
-                  <div className="flex gap-2">
-                    <Input placeholder="Buscar sesiones..." className="flex-1" />
-                    <Button variant="outline" size="icon">
-                      <Search className="h-4 w-4" />
-                    </Button>
-                    <Button variant="outline" size="icon">
-                      <Filter className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  {sessionsData.map((session) => (
-                    <div key={session.id} className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors">
-                      <div className="flex items-center space-x-4">
-                        <div className="text-sm text-muted-foreground">{session.timestamp}</div>
-                        <Badge variant="outline">{session.intent}</Badge>
-                        <div className="flex items-center space-x-1">
-                          <Globe className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-sm">{session.country}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Badge variant={session.confidence >= 0.9 ? "default" : session.confidence >= 0.8 ? "secondary" : "destructive"}>
-                          {(session.confidence * 100).toFixed(0)}%
-                        </Badge>
-                        <Button variant="ghost" size="sm">Ver detalles</Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
         </Tabs>
       </div>
+      <Footer />
     </div>
   );
 };
