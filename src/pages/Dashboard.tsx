@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
@@ -43,6 +44,7 @@ import {
   Pie
 } from 'recharts';
 import Footer from "@/components/Footer";
+import logoImage from "@/image/logo1.png";
 
 const Dashboard = () => {
   const { toast } = useToast();
@@ -87,11 +89,26 @@ const Dashboard = () => {
   ];
 
   const productData = [
-    { product: 'Smartphones', queries: 2500, relevance: 92 },
-    { product: 'Laptops', queries: 1800, relevance: 88 },
-    { product: 'Tablets', queries: 1200, relevance: 85 },
-    { product: 'Auriculares', queries: 900, relevance: 90 },
-    { product: 'Smartwatches', queries: 700, relevance: 87 }
+    { product: 'Pan de molde', queries: 229, relevance: 11.28 },
+    { product: 'Leche liquida', queries: 210, relevance: 10.34 },
+    { product: 'Arroz', queries: 196, relevance: 9.65 },
+    { product: 'Pasta seca', queries: 174, relevance: 8.57 },
+    { product: 'Cafe molido', queries: 162, relevance: 7.98 },
+    { product: 'Azucar', queries: 161, relevance: 7.93 },
+    { product: 'Huevos', queries: 137, relevance: 6.75 },
+    { product: 'Refrescos de cola', queries: 114, relevance: 5.61 },
+    { product: 'Aceite vegetal', queries: 104, relevance: 5.12 },
+    { product: 'Pollo entero', queries: 93, relevance: 4.58 },
+    { product: 'Papas', queries: 79, relevance: 3.89 },
+    { product: 'Frijoles', queries: 72, relevance: 3.55 },
+    { product: 'Queso blando', queries: 67, relevance: 3.30 },
+    { product: 'Cerveza', queries: 54, relevance: 2.66 },
+    { product: 'Harina de trigo', queries: 47, relevance: 2.31 },
+    { product: 'Atun en lata', queries: 46, relevance: 2.26 },
+    { product: 'Tomates', queries: 35, relevance: 1.72 },
+    { product: 'Cebolla', queries: 22, relevance: 1.08 },
+    { product: 'Banano', queries: 16, relevance: 0.79 },
+    { product: 'Manzanas', queries: 13, relevance: 0.64 },
   ];
 
   const sessionsData = [
@@ -102,7 +119,142 @@ const Dashboard = () => {
     { id: '5', timestamp: '2024-01-15 14:20', intent: 'Consulta Precios', country: 'España', confidence: 0.89 }
   ];
 
+  const dataArgentina = [
+  { country: "Argentina", product: "Azucar", score: 23 },
+  { country: "Argentina", product: "Pan de molde", score: 25 },
+  { country: "Argentina", product: "Harina de trigo", score: 25 },
+  { country: "Argentina", product: "Huevos", score: 15 },
+  { country: "Argentina", product: "Leche liquida", score: 25 },
+  { country: "Argentina", product: "Papas", score: 10 },
+  { country: "Argentina", product: "Pasta seca", score: 25 },
+  { country: "Argentina", product: "Pollo entero", score: 10 },
+  { country: "Argentina", product: "Queso blando", score: 25 },
+  { country: "Argentina", product: "Refrescos de cola", score: 25 },
+  { country: "Argentina", product: "Tomates", score: 10 },
+  ];
+
+  const dataBrasil = [
+    { country: "Brasil", product: "Arroz", score: 23 },
+    { country: "Brasil", product: "Azucar", score: 25 },
+    { country: "Brasil", product: "Café molido", score: 24 },
+    { country: "Brasil", product: "Frijoles", score: 25 },
+    { country: "Brasil", product: "Cerveza", score: 25 },
+    { country: "Brasil", product: "Pasta seca", score: 24 },
+    { country: "Brasil", product: "Leche liquida", score: 25 },
+    { country: "Brasil", product: "Refrescos de cola", score: 22 },
+    { country: "Brasil", product: "Pan de molde", score: 25 },
+    { country: "Brasil", product: "Pollo entero", score: 23 },
+  ];
+
+  const dataChile = [
+    { country: "Chile", product: "Arroz", score: 5 },
+    { country: "Chile", product: "Café molido", score: 24 },
+    { country: "Chile", product: "Cerveza", score: 5 },
+    { country: "Chile", product: "Huevos", score: 23 },
+    { country: "Chile", product: "Leche liquida", score: 24 },
+    { country: "Chile", product: "Manzanas", score: 4 },
+    { country: "Chile", product: "Pan de molde", score: 25 },
+    { country: "Chile", product: "Papas", score: 11 },
+    { country: "Chile", product: "Pasta seca", score: 25 },
+    { country: "Chile", product: "Pollo entero", score: 14 },
+    { country: "Chile", product: "Refrescos de cola", score: 25 },
+    { country: "Chile", product: "Tomates", score: 10 },
+  ];
+
+  const dataColombia = [
+    { country: "Colombia", product: "Arroz", score: 27 },
+    { country: "Colombia", product: "Azucar", score: 23 },
+    { country: "Colombia", product: "Banano", score: 9 },
+    { country: "Colombia", product: "Cebolla", score: 12 },
+    { country: "Colombia", product: "Huevos", score: 22 },
+    { country: "Colombia", product: "Leche liquida", score: 19 },
+    { country: "Colombia", product: "Pan de molde", score: 27 },
+    { country: "Colombia", product: "Papas", score: 15 },
+    { country: "Colombia", product: "Queso blando", score: 25 },
+    { country: "Colombia", product: "Tomates", score: 15 },
+  ];
+
+  const dataCostaRica = [
+    { country: "Costa Rica", product: "Arroz", score: 26 },
+    { country: "Costa Rica", product: "Azucar", score: 20 },
+    { country: "Costa Rica", product: "Café molido", score: 32 },
+    { country: "Costa Rica", product: "Frijoles", score: 27 },
+    { country: "Costa Rica", product: "Huevos", score: 13 },
+    { country: "Costa Rica", product: "Leche liquida", score: 19 },
+    { country: "Costa Rica", product: "Pan de molde", score: 24 },
+    { country: "Costa Rica", product: "Papas", score: 16 },
+    { country: "Costa Rica", product: "Pasta seco", score: 25 },
+    { country: "Costa Rica", product: "Refrescos de cola", score: 18 },
+  ];
+
+  const dataEcuador = [
+    { country: "Ecuador", product: "Arroz", score: 19 },
+    { country: "Ecuador", product: "Azucar", score: 15 },
+    { country: "Ecuador", product: "Banano", score: 2 },
+    { country: "Ecuador", product: "Cerveza", score: 24 },
+    { country: "Ecuador", product: "Leche liquida", score: 24 },
+    { country: "Ecuador", product: "Pan de molde", score: 23 },
+    { country: "Ecuador", product: "Papas", score: 2 },
+    { country: "Ecuador", product: "Pasta seca", score: 23 },
+    { country: "Ecuador", product: "Queso blando", score: 17 },
+    { country: "Ecuador", product: "Refrescos de cola", score: 24 },
+  ];
+
+  const dataMexico = [
+    { country: "Mexico", product: "Aceite vegetal", score: 24 },
+    { country: "Mexico", product: "Arroz", score: 23 },
+    { country: "Mexico", product: "Azucar", score: 13 },
+    { country: "Mexico", product: "Café molido", score: 25 },
+    { country: "Mexico", product: "Cebolla", score: 5 },
+    { country: "Mexico", product: "Harina de trigo", score: 22 },
+    { country: "Mexico", product: "Huevos", score: 23 },
+    { country: "Mexico", product: "Leche liquida", score: 25 },
+    { country: "Mexico", product: "Pan de molde", score: 14 },
+    { country: "Mexico", product: "Papas", score: 5 },
+  ];
+
+  const dataPanama = [
+    { country: "Panama", product: "Aceite vegetal", score: 23 },
+    { country: "Panama", product: "Arroz", score: 23 },
+    { country: "Panama", product: "Atun en lata", score: 23 },
+    { country: "Panama", product: "Azucar", score: 17 },
+    { country: "Panama", product: "Banano", score: 5 },
+    { country: "Panama", product: "Cebolla", score: 5 },
+    { country: "Panama", product: "Frijoles", score: 20 },
+    { country: "Panama", product: "Huevos", score: 22 },
+    { country: "Panama", product: "Pan de molde", score: 17 },
+    { country: "Panama", product: "Pollo entero", score: 13 },
+  ];
+
+  const dataParaguay = [
+    { country: "Paraguay", product: "Aceite vegetal", score: 32 },
+    { country: "Paraguay", product: "Arroz", score: 25 },
+    { country: "Paraguay", product: "Cafe molido", score: 32 },
+    { country: "Paraguay", product: "Harina de trigo", score: 25 },
+    { country: "Paraguay", product: "Leche liquida", score: 24 },
+    { country: "Paraguay", product: "Manzanas", score: 9 },
+    { country: "Paraguay", product: "Pan de molde", score: 24 },
+    { country: "Paraguay", product: "Papas", score: 20 },
+    { country: "Paraguay", product: "Pasta seca", score: 27 },
+    { country: "Paraguay", product: "Pollo entero", score: 12 },
+  ];
+
+  const dataPeru = [
+    { country: "Peru", product: "Aceite vegetal", score: 25 },
+    { country: "Peru", product: "Arroz", score: 25 },
+    { country: "Peru", product: "Atun en lata", score: 23 },
+    { country: "Peru", product: "Azucar", score: 25 },
+    { country: "Peru", product: "Café molido", score: 25 },
+    { country: "Peru", product: "Huevos", score: 19 },
+    { country: "Peru", product: "Leche liquida", score: 25 },
+    { country: "Peru", product: "Pan de molde", score: 25 },
+    { country: "Peru", product: "Pasta seca", score: 25 },
+    { country: "Peru", product: "Pollo entero", score: 21 },
+  ];
+
+
   const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
+  const totalProductQueries = productData.reduce((sum, p) => sum + p.queries, 0);
 
   const handleDashboardQuery = async () => {
     if (!queryText.trim()) return;
@@ -189,7 +341,7 @@ const Dashboard = () => {
                 </Button>
               </Link>
               <div className="flex items-center space-x-2">
-                <Brain className="h-6 w-6 text-primary" />
+                <img className='h-10 w-10' src={logoImage} alt="Logo" />
                 <span className="text-lg font-semibold">Dashboard General</span>
                 <span className="text-lg font-semibold">- SPI</span>
               </div>
@@ -562,35 +714,119 @@ const Dashboard = () => {
           </TabsContent>
 
           <TabsContent value="products" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Top Productos Consultados</CardTitle>
-                <CardDescription>Productos más buscados y su relevancia</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {productData.map((product, index) => (
-                    <div key={product.product} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 rounded-full bg-gradient-primary flex items-center justify-center text-white font-semibold text-sm">
-                          {index + 1}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Left: Products list */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Top Productos con los que trabajamos</CardTitle>
+                  <CardDescription>
+                    Productos más presentes para el reporte y su relevancia. TOTAL: <b>2031</b> productos
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {productData.map((product, index) => (
+                      <div key={product.product} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-8 h-8 rounded-full bg-gradient-primary flex items-center justify-center text-white font-semibold text-sm">
+                            {index + 1}
+                          </div>
+                          <span className="font-medium">{product.product}</span>
                         </div>
-                        <span className="font-medium">{product.product}</span>
-                      </div>
-                      <div className="flex items-center space-x-4">
-                        <div className="text-right">
-                          <div className="font-semibold">{product.queries.toLocaleString()}</div>
-                          <div className="text-xs text-muted-foreground">consultas</div>
+                        <div className="flex items-center space-x-4">
+                          <div className="text-right">
+                            <div className="font-semibold">{product.queries.toLocaleString()}</div>
+                            <div className="text-xs text-muted-foreground">datos en SPI</div>
+                          </div>
+                          <Badge variant={product.relevance >= 90 ? "default" : "secondary"}>
+                            {product.relevance}% del total
+                          </Badge>
                         </div>
-                        <Badge variant={product.relevance >= 90 ? "default" : "secondary"}>
-                          {product.relevance}% relevancia
-                        </Badge>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Right: Horizontal bar chart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5 text-accent" />
+                    Participación por Producto
+                  </CardTitle>
+                  <CardDescription>Número de datos registrados por producto</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={360}>
+                    <RechartsBarChart
+                      data={productData.slice(0, 12).reverse()}
+                      layout="vertical"
+                      margin={{ top: 4, right: 12, left: 12, bottom: 4 }}
+                    >
+                      <CartesianGrid strokeDasharray="2 2" />
+                      <XAxis type="number" tickFormatter={(v) => Number(v).toLocaleString()} />
+                      <YAxis type="category" dataKey="product" width={160} interval={0} tick={{ fontSize: 12 }} />
+                      <Tooltip
+                        formatter={(value: number) => [`${Number(value).toLocaleString()} datos`, 'Consultas']}
+                      />
+                      <Bar dataKey="queries" radius={[3, 3, 3, 3]}>
+                        {productData.slice(0, 12).reverse().map((_, index) => (
+                          <Cell key={`prod-bar-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Bar>
+                    </RechartsBarChart>
+                  </ResponsiveContainer>
+
+                  {/* Country-specific product charts in an accordion under the chart */}
+                  <div className="mt-4">
+                    <Accordion type="single" collapsible className="w-full">
+                      {[
+                        { name: 'Argentina', data: dataArgentina },
+                        { name: 'Brasil', data: dataBrasil },
+                        { name: 'Chile', data: dataChile },
+                        { name: 'Colombia', data: dataColombia },
+                        { name: 'Costa Rica', data: dataCostaRica },
+                        { name: 'Ecuador', data: dataEcuador },
+                        { name: 'Mexico', data: dataMexico },
+                        { name: 'Panama', data: dataPanama },
+                        { name: 'Paraguay', data: dataParaguay },
+                        { name: 'Peru', data: dataPeru },
+                      ].map((ds, idx) => {
+                        const sorted = [...ds.data].sort((a, b) => a.score - b.score);
+                        const chartData = sorted.slice().reverse();
+                        const height = Math.min(420, Math.max(220, chartData.length * 24));
+                        const barColor = COLORS[idx % COLORS.length];
+                        return (
+                          <AccordionItem key={`acc-${ds.name}`} value={ds.name}>
+                            <AccordionTrigger className="text-sm">{`Productos en ${ds.name}`}</AccordionTrigger>
+                            <AccordionContent>
+                              <ResponsiveContainer width="100%" height={height}>
+                                <RechartsBarChart
+                                  data={chartData}
+                                  layout="vertical"
+                                  margin={{ top: 4, right: 12, left: 12, bottom: 4 }}
+                                >
+                                  <CartesianGrid strokeDasharray="2 2" />
+                                  <XAxis type="number" />
+                                  <YAxis type="category" dataKey="product" width={180} interval={0} tick={{ fontSize: 12 }} />
+                                  <Tooltip formatter={(value: number) => [`${Number(value).toLocaleString()} datos`, 'Score']} />
+                                  <Bar dataKey="score" radius={[2, 2, 2, 2]}>
+                                    {chartData.map((_, i) => (
+                                      <Cell key={`cell-${ds.name}-${i}`} fill={barColor} />
+                                    ))}
+                                  </Bar>
+                                </RechartsBarChart>
+                              </ResponsiveContainer>
+                            </AccordionContent>
+                          </AccordionItem>
+                        );
+                      })}
+                    </Accordion>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
         </Tabs>

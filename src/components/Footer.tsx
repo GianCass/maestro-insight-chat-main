@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Brain } from "lucide-react";
 import { Link } from "react-router-dom";
+import logoImage from "@/image/logo1.png";
 
 // ... existing code ...
 
@@ -11,7 +12,7 @@ const Footer = () => {
         <div className="flex flex-col md:flex-row md:justify-between gap-8 md:gap-12">
           <div className="md:max-w-md">
             <div className="flex items-center space-x-2 mb-4">
-              <Brain className="h-6 w-6 text-primary" />
+              <img className='h-11 w-11' src={logoImage} alt="Logo" />
               <span className="text-lg font-bold">Sistema Pricing Inteligente</span>
             </div>
             <p className="text-muted-foreground mb-4 max-w-md">

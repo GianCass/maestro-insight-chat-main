@@ -21,8 +21,8 @@
     --primary-foreground: 0 0% 100%;
     --primary-glow: 220 70% 65%;
 
-    /* Secondary - Analytics Purple */
-    --secondary: 270 50% 60%;
+    /* Secondary - Shift from Purple to Blue */
+    --secondary: 210 85% 55%; /* vivid blue */
     --secondary-foreground: 0 0% 100%;
 
     /* Accent - Intelligence Green */
@@ -93,7 +93,7 @@
     --primary-foreground: 220 25% 6%;
     --primary-glow: 220 70% 75%;
 
-    --secondary: 270 50% 65%;
+    --secondary: 210 80% 62%; /* vivid blue in dark mode */
     --secondary-foreground: 220 25% 6%;
 
     --accent: 160 60% 55%;

@@ -45,6 +45,7 @@ import {
 } from "@/api/chat";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import logoImage from "@/image/logo1.png";
 
 /* ======================= Tipos UI ======================= */
 
@@ -412,7 +413,7 @@ const Chatbot = () => {
               </Button>
             </Link>
             <div className="flex items-center space-x-2">
-              <Brain className="h-6 w-6 text-primary" />
+              <img className='h-10 w-10' src={logoImage} alt="Logo" />
               <span className="text-lg font-semibold">Chatbot SPI</span>
             </div>
           </div>

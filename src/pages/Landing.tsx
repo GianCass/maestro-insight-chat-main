@@ -24,6 +24,7 @@ import {
   Sparkles
 } from "lucide-react";
 import landingImage from "@/image/landing.jpg";
+import logoImage from "@/image/logo1.png";
 import Footer from "@/components/Footer";
 
 const Landing = () => {
@@ -33,7 +34,7 @@ const Landing = () => {
       <nav className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Brain className="h-8 w-8 text-primary" />
+            <img className='h-10 w-10' src={logoImage} alt="Logo" />
             <span className="text-xl font-bold bg-gradient-hero bg-clip-text text-transparent">
               Sistema Pricing Inteligente
             </span>
