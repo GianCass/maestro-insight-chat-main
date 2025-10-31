@@ -39,6 +39,11 @@ const Footer = () => {
                 </Link>
               </li>
               <li>
+                <Link to="/settings" className="hover:text-primary transition-colors">
+                  Configuración de Usuario
+                </Link>
+              </li>
+              <li>
                 <a href="https://github.com/Pricing-Inteligente/Front.git" className="hover:text-primary transition-colors">
                   Documentación
                 </a>
