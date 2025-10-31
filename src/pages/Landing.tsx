@@ -2,6 +2,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import UserAvatarLink from "@/components/UserAvatarLink";
 import {
   Bot,
   BarChart3,
@@ -28,6 +30,7 @@ import logoImage from "@/image/logo1.png";
 import Footer from "@/components/Footer";
 
 const Landing = () => {
+  const { user } = useAuth();
   return (
     <div className="min-h-screen bg-background">
       {/* Navigation */}
@@ -40,24 +43,39 @@ const Landing = () => {
             </span>
           </div>
           <div className="flex items-center space-x-4">
-            <Link to="/support">
-              <Button variant="ghost" size="sm">
-                <HelpCircle className="h-4 w-4 mr-2" />
-                Soporte
-              </Button>
-            </Link>
-            <Link to="/login">
-              <Button variant="ghost" size="sm">
-                <LogIn className="h-4 w-4 mr-2" />
-                Iniciar Sesión
-              </Button>
-            </Link>
-            <Link to="/register">
-              <Button variant="default" size="sm">
-                <UserPlus className="h-4 w-4 mr-2" />
-                Registrarse
-              </Button>
-            </Link>
+            {user ? (
+              // Si está logueado, mostrar solo el avatar que lleva a Settings
+              <>
+                <Link to="/support">
+                  <Button variant="ghost" size="sm">
+                    <HelpCircle className="h-4 w-4 mr-2" />
+                    Soporte
+                  </Button>
+                </Link>
+              <UserAvatarLink />
+              </>
+            ) : (
+              <>
+                <Link to="/support">
+                  <Button variant="ghost" size="sm">
+                    <HelpCircle className="h-4 w-4 mr-2" />
+                    Soporte
+                  </Button>
+                </Link>
+                <Link to="/login">
+                  <Button variant="ghost" size="sm">
+                    <LogIn className="h-4 w-4 mr-2" />
+                    Iniciar Sesión
+                  </Button>
+                </Link>
+                <Link to="/register">
+                  <Button variant="default" size="sm">
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Registrarse
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </nav>

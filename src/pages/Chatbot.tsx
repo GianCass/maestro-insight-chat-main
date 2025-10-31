@@ -12,7 +12,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { generatePlot } from "@/api/plotlyService";
 import { PlotlyChart } from "@/components/PlotlyChart";
 import {
@@ -29,6 +29,7 @@ import {
   AlertCircle,
   Brain,
 } from "lucide-react";
+import UserAvatarLink from "@/components/UserAvatarLink";
 
 import type {
   ChatMessage,
@@ -140,7 +141,8 @@ const toAggregateResult = (
 /* ======================= Componente ======================= */
 
 const Chatbot = () => {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
   const { toast } = useToast();
 
   // Session management
@@ -190,6 +192,13 @@ const Chatbot = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Auth guard: redirect to login if not authenticated
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate("/login");
+    }
+  }, [loading, user, navigate]);
 
   const handleSendMessage = async (messageToSend?: string) => {
     const messageText = messageToSend || currentMessage.trim();
@@ -421,9 +430,7 @@ const Chatbot = () => {
             <Link to="/dashboard">
               <Button variant="outline">Dashboard</Button>
             </Link>
-            <Button variant="ghost" size="icon">
-              <Settings className="h-5 w-5" />
-            </Button>
+            <UserAvatarLink />
           </div>
         </div>
       </header>

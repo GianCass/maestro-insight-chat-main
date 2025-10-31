@@ -7,7 +7,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { sendDashboardQuery, sendDashboardQueryStream } from "@/api/dashboard";
 import {
@@ -29,6 +29,7 @@ import {
   Zap,
   Brain
 } from "lucide-react";
+import UserAvatarLink from "@/components/UserAvatarLink";
 import {
   LineChart as RechartsLineChart,
   Line,
@@ -45,15 +46,25 @@ import {
 } from 'recharts';
 import Footer from "@/components/Footer";
 import logoImage from "@/image/logo1.png";
+import { useAuth } from "@/hooks/useAuth";
 
 const Dashboard = () => {
   const { toast } = useToast();
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
   const [timeRange, setTimeRange] = useState('7d');
   const [selectedCountry, setSelectedCountry] = useState('all');
 
   useEffect(() => {
     document.title = "Dashboard General - SPI";
   }, []);
+
+  // Auth guard: redirect to login if not authenticated
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate("/login");
+    }
+  }, [loading, user, navigate]);
 
   // Dashboard query functionality
   const [queryText, setQueryText] = useState('');
@@ -371,9 +382,7 @@ const Dashboard = () => {
                   {isQuerying ? 'Consultando...' : 'Consultar'}
                 </Button>
               </div>
-              <Button variant="ghost" size="icon">
-                <RefreshCw className="h-5 w-5" />
-              </Button>
+              <UserAvatarLink />
             </div>
           </div>
         </div>
