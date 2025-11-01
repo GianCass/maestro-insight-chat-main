@@ -2,6 +2,32 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
@@ -189,6 +215,13 @@ const Chatbot = () => {
   });
   const isCreatingChatRef = useRef(false);
 
+  // UI state for chat context actions
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [renameChatId, setRenameChatId] = useState<string | null>(null);
+  const [renameTitle, setRenameTitle] = useState<string>("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteChatId, setDeleteChatId] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollToBottom = () =>
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -319,6 +352,83 @@ const Chatbot = () => {
     } catch (e) {
       console.error("No se pudo abrir el chat:", e);
       toast({ title: "No se pudo cargar el chat", variant: "destructive" });
+    }
+  };
+
+  // === Chat actions: rename & delete ===
+  const openRenameDialog = (chatId: string, currentTitle: string) => {
+    setRenameChatId(chatId);
+    setRenameTitle(currentTitle || "");
+    setRenameDialogOpen(true);
+  };
+
+  const handleConfirmRename = async () => {
+    const title = renameTitle.trim();
+    if (!renameChatId || title.length === 0) {
+      toast({ title: "Título inválido", description: "Escribe un nombre para el chat.", variant: "destructive" });
+      return;
+    }
+    try {
+      const { error } = await (supabase as any)
+        .from("chats")
+        .update({ title })
+        .eq("id", renameChatId);
+      if (error) throw error;
+
+      setChats((prev) => prev.map((c) => (c.id === renameChatId ? { ...c, title } : c)));
+      setRenameDialogOpen(false);
+      setRenameChatId(null);
+      toast({ title: "Chat renombrado" });
+    } catch (e) {
+      console.error("No se pudo renombrar el chat:", e);
+      toast({ title: "No se pudo renombrar", variant: "destructive" });
+    }
+  };
+
+  const openDeleteConfirm = (chatId: string) => {
+    setDeleteChatId(chatId);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteChatId) return;
+    const chatId = deleteChatId;
+    try {
+      // Primero borrar mensajes; luego el chat
+      await (supabase as any).from("messages").delete().eq("chat_id", chatId);
+      const { error } = await (supabase as any).from("chats").delete().eq("id", chatId);
+      if (error) throw error;
+
+      // Actualizar estado local y storage
+      setChats((prev) => prev.filter((c) => c.id !== chatId));
+      if (selectedChatId === chatId) {
+        setSelectedChatId(null);
+        setMessages([]);
+        chatHistory.clear(sessionId);
+        setFigure(null);
+        setFigureQuery("");
+        setIsPlotLoading(false);
+      }
+      try {
+        const mapped = localStorage.getItem(`chatdb-${sessionId}`);
+        if (mapped === chatId) {
+          localStorage.removeItem(`chatdb-${sessionId}`);
+          setChatDbId(null);
+        }
+        const last = localStorage.getItem('last-chat-id');
+        if (last === chatId) {
+          localStorage.removeItem('last-chat-id');
+        }
+        localStorage.removeItem(`vizprompt-${chatId}`);
+      } catch { /* noop */ }
+
+      toast({ title: "Chat eliminado" });
+    } catch (e) {
+      console.error("No se pudo eliminar el chat:", e);
+      toast({ title: "No se pudo eliminar", variant: "destructive" });
+    } finally {
+      setDeleteDialogOpen(false);
+      setDeleteChatId(null);
     }
   };
 
@@ -656,14 +766,29 @@ const Chatbot = () => {
                       <MessageSquare className={`h-5 w-5 ${selectedChatId === c.id ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
                       <span className="text-sm break-words whitespace-normal">{c.title || 'Conversación'}</span>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                      title={new Date(c.created_at).toLocaleString()}
-                    >
-                      <MoreVertical className={`h-3 w-3 ${selectedChatId === c.id ? 'text-primary-foreground' : ''}`} />
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                          title={new Date(c.created_at).toLocaleString()}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <MoreVertical className={`h-3 w-3 ${selectedChatId === c.id ? 'text-primary-foreground' : ''}`} />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenuLabel>Opciones</DropdownMenuLabel>
+                        <DropdownMenuItem onClick={() => openRenameDialog(c.id, c.title)}>
+                          Renombrar
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => openDeleteConfirm(c.id)}>
+                          Eliminar
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </button>
                 ))}
               </div>
@@ -960,6 +1085,45 @@ const Chatbot = () => {
           </div>
         </div>
       </div>
+
+      {/* Rename Chat Dialog */}
+      <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Renombrar chat</DialogTitle>
+            <DialogDescription>Escribe un nuevo título para esta conversación.</DialogDescription>
+          </DialogHeader>
+          <div className="mt-2">
+            <Input
+              value={renameTitle}
+              onChange={(e) => setRenameTitle(e.target.value)}
+              placeholder="Título del chat"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleConfirmRename}>Guardar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Chat Confirm */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar este chat?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará el chat y todos sus mensajes. No se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
