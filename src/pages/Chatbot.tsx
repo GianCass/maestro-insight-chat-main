@@ -47,6 +47,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import logoImage from "@/image/logo1.png";
+import { supabase } from "@/integrations/supabase/client";
 
 /* ======================= Tipos UI ======================= */
 
@@ -146,7 +147,7 @@ const Chatbot = () => {
   const { toast } = useToast();
 
   // Session management
-  const [sessionId] = useState(() => {
+  const [sessionId, setSessionId] = useState(() => {
     const stored = localStorage.getItem("pricing-session");
     if (stored) return stored;
     const newId = generateSessionId();
@@ -154,21 +155,7 @@ const Chatbot = () => {
     return newId;
   });
 
-  const [messages, setMessages] = useState<UIMessage[]>(() => {
-    const stored = chatHistory.load(sessionId) as UIMessage[];
-    if (stored.length > 0) return stored;
-
-    return [
-      {
-        id: "1",
-        role: "assistant",
-        content:
-          "¡Hola! Soy Pricy, tu asistente de análisis de retail. Puedo ayudarte con datos de precios, tendencias del mercado y análisis de productos. ¿En qué puedo ayudarte hoy?",
-        timestamp: new Date().toISOString(),
-        confidence: 0.95,
-      },
-    ];
-  });
+  const [messages, setMessages] = useState<UIMessage[]>([]);
 
   const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -177,7 +164,7 @@ const Chatbot = () => {
   const [confidenceThreshold, setConfidenceThreshold] = useState<number[]>([
     0.7,
   ]);
-  const [selectedModel, setSelectedModel] = useState("llama 3:8b");
+  const [selectedModel, setSelectedModel] = useState("llama3:8b");
   const [retryRequest, setRetryRequest] = useState<{ message: string } | null>(
     null
   );
@@ -185,6 +172,22 @@ const Chatbot = () => {
   const [figure, setFigure] = useState<PlotFigure>(null);
   const [figureQuery, setFigureQuery] = useState("");
   const [isPlotLoading, setIsPlotLoading] = useState(false);
+  // Emoji del usuario autenticado para el avatar de mensajes del lado derecho
+  const [userEmoji, setUserEmoji] = useState<string>("🧑");
+  // Chats del usuario
+  type ChatRow = { id: string; title: string; created_at: string };
+  const [chats, setChats] = useState<ChatRow[]>([]);
+  const [loadingChats, setLoadingChats] = useState(false);
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  // ID del chat en Supabase para esta sesión (se define al primer mensaje)
+  const [chatDbId, setChatDbId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(`chatdb-${sessionId}`);
+    } catch {
+      return null;
+    }
+  });
+  const isCreatingChatRef = useRef(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollToBottom = () =>
@@ -200,6 +203,125 @@ const Chatbot = () => {
     }
   }, [loading, user, navigate]);
 
+  // Cargar lista de chats del usuario
+  useEffect(() => {
+    const loadChats = async () => {
+      if (!user?.id) return;
+      setLoadingChats(true);
+      try {
+        const { data, error } = await (supabase as any)
+          .from("chats")
+          .select("id, title, created_at")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false });
+        if (!error && Array.isArray(data)) {
+          setChats(data as ChatRow[]);
+        }
+      } catch (e) {
+        console.warn("No se pudieron cargar los chats:", e);
+      } finally {
+        setLoadingChats(false);
+      }
+    };
+    loadChats();
+  }, [user?.id]);
+
+  // Cargar emoji del usuario autenticado para usarlo como avatar en mensajes del usuario
+  useEffect(() => {
+    const loadEmoji = async () => {
+      if (!user?.id) {
+        setUserEmoji("🧑");
+        return;
+      }
+      try {
+        const { data, error } = await (supabase as any)
+          .from("profiles")
+          .select("profile_emoji")
+          .eq("id", user.id)
+          .single();
+        if (!error && data?.profile_emoji) {
+          setUserEmoji(String(data.profile_emoji));
+        } else {
+          setUserEmoji("🧑");
+        }
+      } catch {
+        setUserEmoji("🧑");
+      }
+    };
+    loadEmoji();
+  }, [user?.id]);
+
+  // Restaurar último chat seleccionado tras recarga o navegación desde Settings
+  useEffect(() => {
+    if (!user?.id) return;
+    if (selectedChatId) return; // ya hay uno seleccionado
+    if (messages.length > 0) return; // si ya hay mensajes (p.ej., nueva conversación), no restaurar
+    try {
+      // Priorizar 'last-chat-id' (acción explícita del usuario desde Settings) sobre el mapeo de sesión
+      const saved = localStorage.getItem('last-chat-id') || localStorage.getItem(`chatdb-${sessionId}`);
+      if (saved) {
+        // Abrir automáticamente el último chat
+        void openChat(saved);
+      }
+    } catch { /* noop */ }
+  }, [user?.id, sessionId, selectedChatId, messages.length]);
+
+  // Seleccionar un chat: cargar historial de mensajes y fijar mapping de chat_id
+  const openChat = async (chatId: string) => {
+    setSelectedChatId(chatId);
+    try { localStorage.setItem('last-chat-id', chatId); } catch {}
+    try {
+      // Persist mapping a esta sesión
+      setChatDbId(chatId);
+      try { localStorage.setItem(`chatdb-${sessionId}`, chatId); } catch {}
+
+      const { data, error } = await (supabase as any)
+        .from("messages")
+        .select("id, prompt, respuesta, created_at")
+        .eq("chat_id", chatId)
+        .order("created_at", { ascending: true });
+
+      if (error) throw error;
+
+      const history: UIMessage[] = [];
+      // Reconstruimos como pares user -> assistant
+      (data || []).forEach((m: any) => {
+        if (m.prompt) {
+          history.push({
+            id: `${m.id}-u`,
+            role: "user",
+            content: String(m.prompt),
+            timestamp: m.created_at ?? new Date().toISOString(),
+          });
+        }
+        history.push({
+          id: `${m.id}-a`,
+          role: "assistant",
+          content: String(m.respuesta ?? ""),
+          timestamp: m.created_at ?? new Date().toISOString(),
+        });
+      });
+
+      // Si no hay mensajes, mostrar el saludo inicial
+      const initialIfEmpty: UIMessage[] = history.length > 0 ? history : [
+        {
+          id: "1",
+          role: "assistant",
+          content:
+            "¡Hola! Soy Pricy, tu asistente de análisis de retail. Puedo ayudarte con datos de precios, tendencias del mercado y análisis de productos. ¿En qué puedo ayudarte hoy?",
+          timestamp: new Date().toISOString(),
+          confidence: 0.95,
+        },
+      ];
+
+      setMessages(initialIfEmpty);
+      chatHistory.save(sessionId, initialIfEmpty);
+    } catch (e) {
+      console.error("No se pudo abrir el chat:", e);
+      toast({ title: "No se pudo cargar el chat", variant: "destructive" });
+    }
+  };
+
   const handleSendMessage = async (messageToSend?: string) => {
     const messageText = messageToSend || currentMessage.trim();
     if (!messageText) return;
@@ -211,6 +333,33 @@ const Chatbot = () => {
         variant: "destructive",
       });
       return;
+    }
+
+    // Crear registro del chat en Supabase al primer mensaje si aún no existe
+    try {
+      const existingId = chatDbId ?? localStorage.getItem(`chatdb-${sessionId}`);
+      if (!existingId) {
+        // Usar el primer prompt completo del usuario como título del chat
+        const title = messageText.trim() || "Conversación";
+        const { data, error } = await (supabase as any)
+          .from("chats")
+          .insert({ title, user_id: user.id })
+          .select("id")
+          .single();
+        if (!error && data?.id) {
+          const newId = String(data.id);
+          setChatDbId(newId);
+          setSelectedChatId(newId);
+          try {
+            localStorage.setItem(`chatdb-${sessionId}`, newId);
+            localStorage.setItem('last-chat-id', newId);
+          } catch {}
+          // Refrescar la lista en memoria sin recargar
+          setChats((prev) => [{ id: newId, title, created_at: new Date().toISOString() }, ...prev]);
+        }
+      }
+    } catch (e) {
+      console.warn("No se pudo crear el chat en Supabase:", e);
     }
 
     const userMessage: UIMessage = {
@@ -248,7 +397,7 @@ const Chatbot = () => {
         strict: strictMode,
         threshold: confidenceThreshold[0],
       });
-
+      let finalAnswer = "";
       for await (const part of stream) {
       // ⬇️ Si el backend envía un prompt de visualización, disparamos Plotly
           if (part.vizPrompt) {
@@ -267,6 +416,10 @@ const Chatbot = () => {
               })
               .finally(() => setIsPlotLoading(false));
           }
+
+        if (typeof part.content === "string") {
+          finalAnswer = part.content;
+        }
 
         setMessages((prev) => {
           const next: UIMessage[] = prev.map((msg) => {
@@ -300,6 +453,26 @@ const Chatbot = () => {
           chatHistory.save(sessionId, next);
           return next;
         });
+      }
+
+      // Guardar el mensaje en Supabase una vez que termina el stream
+      try {
+        const chatId = chatDbId ?? localStorage.getItem(`chatdb-${sessionId}`);
+        if (chatId) {
+          await (supabase as any)
+            .from("messages")
+            .insert({
+              prompt: messageText,
+              respuesta: finalAnswer || "",
+              intencion: "-",
+              visualizacion: "-",
+              chat_id: chatId,
+            });
+        } else {
+          console.warn("No se encontró chat_id para guardar el mensaje");
+        }
+      } catch (e) {
+        console.warn("No se pudo guardar el mensaje en Supabase:", e);
       }
     } catch (error) {
       console.error("Chat stream failed:", error);
@@ -337,20 +510,32 @@ const Chatbot = () => {
 
   const handleNewConversation = () => {
     const newSessionId = generateSessionId();
+    // Persist new session id and reset mapping
     localStorage.setItem("pricing-session", newSessionId);
+    try { localStorage.removeItem(`chatdb-${sessionId}`); } catch {}
+    try { localStorage.removeItem('last-chat-id'); } catch {}
+
+    // Update stateful session id to avoid reloading the page
+    setSessionId(newSessionId);
+    setSelectedChatId(null);
+    setChatDbId(null);
+    chatHistory.clear(sessionId);
+
+  // Ocultar cualquier visualización dinámica previa
+  setFigure(null);
+  setFigureQuery("");
+  setIsPlotLoading(false);
 
     const initialMessage: UIMessage = {
       id: "1",
       role: "assistant",
       content:
-        "¡Hola! Soy tu asistente de análisis de retail. Puedo ayudarte con datos de precios, tendencias del mercado y análisis de productos. ¿En qué puedo ayudarte hoy?",
+        "¡Hola! Soy Pricy, tu asistente de análisis de retail. Puedo ayudarte con datos de precios, tendencias del mercado y análisis de productos. ¿En qué puedo ayudarte hoy?",
       timestamp: new Date().toISOString(),
       confidence: 0.95,
     };
 
     setMessages([initialMessage]);
-    chatHistory.clear(sessionId);
-    window.location.reload();
   };
 
   useEffect(() => {
@@ -450,28 +635,37 @@ const Chatbot = () => {
 
 
             <div>
-              <h3 className="text-sm font-medium mb-3">Chats Recientes</h3>
+              <h3 className="text-sm font-medium mb-3">Tus Chats</h3>
               <div className="space-y-2">
-                {["Análisis de precios Q4", "Tendencias retail Europa", "Comparativa productos tech"].map(
-                  (title, index) => (
-                    <div
-                      key={index}
-                      className="p-2 rounded-md hover:bg-accent cursor-pointer group flex items-center justify-between"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm truncate">{title}</span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                      >
-                        <MoreVertical className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  )
+                {loadingChats && (
+                  <div className="text-xs text-muted-foreground">Cargando…</div>
                 )}
+                {!loadingChats && chats.length === 0 && (
+                  <div className="text-xs text-muted-foreground">Aún no tienes chats.</div>
+                )}
+                {!loadingChats && chats.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => openChat(c.id)}
+                    className={`w-full p-3 rounded-md group flex items-center justify-between text-left
+                      ${selectedChatId === c.id
+                        ? 'bg-primary text-primary-foreground'
+                        : 'hover:bg-primary/20 dark:hover:bg-primary/30'}`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <MessageSquare className={`h-5 w-5 ${selectedChatId === c.id ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
+                      <span className="text-sm break-words whitespace-normal">{c.title || 'Conversación'}</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                      title={new Date(c.created_at).toLocaleString()}
+                    >
+                      <MoreVertical className={`h-3 w-3 ${selectedChatId === c.id ? 'text-primary-foreground' : ''}`} />
+                    </Button>
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -479,10 +673,23 @@ const Chatbot = () => {
 
         {/* Chat Area */}
         <div className="flex-1 flex flex-col">
-          {/* Messages */}
+          {/* Messages / Placeholder */}
           <ScrollArea className="flex-1 p-6">
             <div className="space-y-6 max-w-4xl mx-auto">
-              {messages.map((message) => (
+              {messages.length === 0 && !selectedChatId ? (
+                <div className="h-[60vh] flex flex-col items-center justify-center text-center text-muted-foreground">
+                  <div className="mb-4">
+                    <Bot className="h-10 w-10 text-primary mx-auto" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground mb-2">Bienvenido al Chatbot, soy Pricy!</h3>
+                  <p className="max-w-md mb-4">Selecciona un chat en la barra lateral para ver tus consultas, o crea una nueva conversación.</p>
+                  <Button variant="default" onClick={handleNewConversation}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nueva Conversación
+                  </Button>
+                </div>
+              ) : (
+              messages.map((message) => (
                 <div
                   key={message.id}
                   className={`flex gap-4 ${message.role === "user" ? "justify-end" : ""}`}
@@ -626,13 +833,14 @@ const Chatbot = () => {
 
                   {message.role === "user" && (
                     <div className="flex-shrink-0 order-3">
-                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                        <User className="h-4 w-4" />
+                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-base">
+                        <span aria-hidden>{userEmoji}</span>
                       </div>
                     </div>
                   )}
                 </div>
-              ))}
+              ))
+              )}
 
               {(isLoading || isStreaming) && (
                 <div className="flex gap-4">

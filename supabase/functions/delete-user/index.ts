@@ -58,8 +58,35 @@ serve(async (req: Request) => {
 
     const userId = userData.user.id;
 
-    // 1. Delete profile
-    await supabaseAdmin.from("profiles").delete().eq("id", userId);
+    // 1. Delete all user data (messages -> chats -> profile) before removing auth user
+    // 1.a Find all chat ids for this user
+    const { data: chatRows, error: chatsErr } = await supabaseAdmin
+      .from("chats")
+      .select("id")
+      .eq("user_id", userId);
+    if (chatsErr) throw chatsErr;
+
+    const chatIds = (chatRows ?? []).map((c: { id: string }) => c.id);
+
+    // 1.b Delete messages for those chats (if any)
+    if (chatIds.length > 0) {
+      const { error: msgErr } = await supabaseAdmin
+        .from("messages")
+        .delete()
+        .in("chat_id", chatIds);
+      if (msgErr) throw msgErr;
+    }
+
+    // 1.c Delete chats for this user
+    const { error: delChatsErr } = await supabaseAdmin
+      .from("chats")
+      .delete()
+      .eq("user_id", userId);
+    if (delChatsErr) throw delChatsErr;
+
+    // 1.d Delete profile
+    const { error: profileErr } = await supabaseAdmin.from("profiles").delete().eq("id", userId);
+    if (profileErr) throw profileErr;
 
     // 2. Delete auth user
     const { error: delErr } = await supabaseAdmin.auth.admin.deleteUser(userId);

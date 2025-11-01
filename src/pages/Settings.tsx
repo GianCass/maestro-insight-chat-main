@@ -50,6 +50,11 @@ const Settings = () => {
   const [deleting, setDeleting] = useState(false);
   // perfiles are fixed options (economista, mercadologo, asesor)
 
+  // Mensajes/consultas recientes del usuario
+  type RecentMsg = { id: string; prompt: string | null; respuesta: string | null; created_at: string; chat_id: string };
+  const [recentMsgs, setRecentMsgs] = useState<RecentMsg[]>([]);
+  const [loadingMsgs, setLoadingMsgs] = useState(false);
+
   const canSave = useMemo(() => {
     const passOk = newPassword === confirmPassword || (!newPassword && !confirmPassword);
     return !!user && passOk && (displayName.length > 0 || perfilInteres !== "" || emoji !== "" || newPassword.length > 0);
@@ -107,6 +112,50 @@ const Settings = () => {
 
     init();
     }, [user, loading, navigate]);
+
+  // Cargar consultas recientes (prompts) guardadas del usuario
+  useEffect(() => {
+    const loadRecent = async () => {
+      if (!user?.id) return;
+      setLoadingMsgs(true);
+      try {
+        // 1) Obtener los chats del usuario (ids)
+        const { data: chats, error: chatsErr } = await (supabase as any)
+          .from('chats')
+          .select('id')
+          .eq('user_id', user.id);
+        if (chatsErr) throw chatsErr;
+        const chatIds: string[] = (chats || []).map((c: any) => String(c.id));
+        if (chatIds.length === 0) {
+          setRecentMsgs([]);
+          return;
+        }
+
+        // 2) Traer los mensajes de esos chats (últimos 20)
+        const { data: msgs, error: msgsErr } = await (supabase as any)
+          .from('messages')
+          .select('id, prompt, respuesta, created_at, chat_id')
+          .in('chat_id', chatIds)
+          .order('created_at', { ascending: false })
+          .limit(20);
+        if (msgsErr) throw msgsErr;
+        setRecentMsgs((msgs || []) as RecentMsg[]);
+      } catch (e) {
+        console.warn('No se pudieron cargar las consultas recientes:', e);
+      } finally {
+        setLoadingMsgs(false);
+      }
+    };
+    loadRecent();
+  }, [user?.id]);
+
+  const handleOpenMessage = (chatId: string) => {
+    try {
+      // Señalar al Chatbot qué chat abrir
+      localStorage.setItem('last-chat-id', chatId);
+    } catch {}
+    navigate('/chatbot');
+  };
 
 
   const handleSave = async () => {
@@ -369,6 +418,42 @@ const Settings = () => {
                   </AlertDialogContent>
                 </AlertDialog>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Consultas recientes (lado derecho, debajo de datos de cuenta) */}
+          <Card className="lg:col-span-3">
+            <CardHeader>
+              <CardTitle>Consultas recientes</CardTitle>
+              <CardDescription>Tu historial de prompts guardados recientemente</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingMsgs ? (
+                <div className="text-sm text-muted-foreground">Cargando…</div>
+              ) : recentMsgs.length === 0 ? (
+                <div className="text-sm text-muted-foreground">Aún no hay consultas guardadas.</div>
+              ) : (
+                <div className="divide-y divide-border rounded-md border">
+                  {recentMsgs.map((m) => {
+                    const prompt = (m.prompt || '').toString();
+                    const respuesta = (m.respuesta || '').toString();
+                    const shortResp = respuesta.length > 160 ? `${respuesta.slice(0, 160)}…` : respuesta;
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => handleOpenMessage(m.chat_id)}
+                        className="w-full text-left p-3 rounded-md hover:bg-primary/20 dark:hover:bg-primary/30 transition-colors"
+                        title={new Date(m.created_at).toLocaleString()}
+                      >
+                        <div className="text-sm font-medium text-foreground truncate">{prompt || '(sin contenido)'}</div>
+                        {shortResp && (
+                          <div className="text-xs text-muted-foreground mt-1 truncate">{shortResp}</div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

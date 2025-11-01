@@ -22,7 +22,7 @@ class AuthService {
 
   async register(email: string, password: string, name: string): Promise<{ user: User | null }> {
     const redirectUrl = `${window.location.origin}/`;
-    
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -35,7 +35,33 @@ class AuthService {
     });
 
     if (error) {
+      const rawMsg = (error.message || '').toLowerCase();
+      const code = (error as any).code || '';
+      const isDuplicate =
+        code === 'user_already_registered' ||
+        code === 'user_already_exists' ||
+        rawMsg.includes('already registered') ||
+        rawMsg.includes('already exists') ||
+        rawMsg.includes('ya está registrado') ||
+        rawMsg.includes('ya existe');
+
+      if (isDuplicate) {
+        const dupErr = new Error('EMAIL_ALREADY_REGISTERED');
+        (dupErr as any).code = 'EMAIL_ALREADY_REGISTERED';
+        throw dupErr;
+      }
+
       throw new Error(error.message);
+    }
+
+    // Supabase edge case: if the email already exists but is unconfirmed,
+    // signUp may succeed but return a user with empty identities array.
+    // Treat this as "already registered" to block duplicate registrations.
+    const identitiesLen = (data as any)?.user?.identities?.length;
+    if (typeof identitiesLen === 'number' && identitiesLen === 0) {
+      const dupErr = new Error('EMAIL_ALREADY_REGISTERED');
+      (dupErr as any).code = 'EMAIL_ALREADY_REGISTERED';
+      throw dupErr;
     }
 
     return { user: data.user };

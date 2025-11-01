@@ -86,15 +86,22 @@ const Register = () => {
       setTimeout(() => {
         navigate("/login");
       }, 2000);
-    } catch (error) {
+    } catch (error: any) {
       let errorMessage = "No se pudo crear la cuenta";
 
-      if (error instanceof Error) {
-        if (error.message.includes("already registered")) {
-          errorMessage = "Este email ya está registrado. Intenta iniciar sesión.";
-        } else {
-          errorMessage = error.message;
-        }
+      const code = error?.code || (error instanceof Error ? error.message : "");
+      const msg = (error?.message || "").toLowerCase();
+      const isDuplicate =
+        code === 'EMAIL_ALREADY_REGISTERED' ||
+        msg.includes('already registered') ||
+        msg.includes('already exists') ||
+        msg.includes('ya está registrado') ||
+        msg.includes('ya existe');
+
+      if (isDuplicate) {
+        errorMessage = "Este email ya está registrado. Intenta iniciar sesión.";
+      } else if (error instanceof Error && error.message) {
+        errorMessage = error.message;
       }
 
       toast({
