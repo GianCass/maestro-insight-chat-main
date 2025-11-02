@@ -47,6 +47,7 @@ import {
 import Footer from "@/components/Footer";
 import logoImage from "@/image/logo1.png";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 
 const Dashboard = () => {
   const { toast } = useToast();
@@ -72,6 +73,75 @@ const Dashboard = () => {
   const [isQuerying, setIsQuerying] = useState(false);
   const [queryResults, setQueryResults] = useState<any[]>([]);
   const [queryChart, setQueryChart] = useState<any>(null);
+  // Global totals across SPI (all users)
+  const [totalQueriesAllTime, setTotalQueriesAllTime] = useState<number | null>(null);
+  const [dailyChangePct, setDailyChangePct] = useState<number | null>(null);
+  const [loadingTotals, setLoadingTotals] = useState(false);
+
+  useEffect(() => {
+    const loadTotals = async () => {
+      setLoadingTotals(true);
+      try {
+        const { data, error } = await supabase.functions.invoke('metrics-dashboard', { body: {} });
+        if (error) throw error;
+        if (!data?.success) throw new Error(data?.error || 'metrics error');
+        setTotalQueriesAllTime(Number(data.totalAll ?? 0));
+        setDailyChangePct(Number(data.dailyChangePct ?? 0));
+      } catch (e) {
+        console.warn('Fallo al cargar métricas globales:', e);
+        setTotalQueriesAllTime(0);
+        setDailyChangePct(0);
+      } finally {
+        setLoadingTotals(false);
+      }
+    };
+    loadTotals();
+  }, []);
+
+  // Recent user queries (last 5), similar to Settings page
+  type RecentMsg = { id: string; prompt: string | null; respuesta: string | null; created_at: string; chat_id: string };
+  const [recentMsgs, setRecentMsgs] = useState<RecentMsg[]>([]);
+  const [loadingRecent, setLoadingRecent] = useState(false);
+
+  useEffect(() => {
+    const loadRecent = async () => {
+      if (!user?.id) return;
+      setLoadingRecent(true);
+      try {
+        // 1) Get chat ids for this user
+        const { data: chats, error: chatsErr } = await (supabase as any)
+          .from('chats')
+          .select('id')
+          .eq('user_id', user.id);
+        if (chatsErr) throw chatsErr;
+        const chatIds: string[] = (chats || []).map((c: any) => String(c.id));
+        if (chatIds.length === 0) {
+          setRecentMsgs([]);
+          return;
+        }
+
+        // 2) Fetch last 5 messages across those chats
+        const { data: msgs, error: msgsErr } = await (supabase as any)
+          .from('messages')
+          .select('id, prompt, respuesta, created_at, chat_id')
+          .in('chat_id', chatIds)
+          .order('created_at', { ascending: false })
+          .limit(5);
+        if (msgsErr) throw msgsErr;
+        setRecentMsgs((msgs || []) as RecentMsg[]);
+      } catch (e) {
+        console.warn('No se pudieron cargar las últimas consultas:', e);
+      } finally {
+        setLoadingRecent(false);
+      }
+    };
+    loadRecent();
+  }, [user?.id]);
+
+  const handleOpenMessage = (chatId: string) => {
+    try { localStorage.setItem('last-chat-id', chatId); } catch {}
+    navigate('/chatbot');
+  };
 
   // Mock data
   const kpiData = {
@@ -82,14 +152,58 @@ const Dashboard = () => {
     evidenceClickthrough: 34.7
   };
 
-  const timeseriesData = [
-    { time: '00:00', queries: 120, latency: 200 },
-    { time: '04:00', queries: 89, latency: 180 },
-    { time: '08:00', queries: 350, latency: 250 },
-    { time: '12:00', queries: 520, latency: 300 },
-    { time: '16:00', queries: 480, latency: 275 },
-    { time: '20:00', queries: 310, latency: 220 }
-  ];
+  // User hourly queries (today) aggregated in 4-hour bins
+  type HourBin = { time: string; queries: number };
+  const HOUR_LABELS: string[] = ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00'];
+  const [userHourlySeries, setUserHourlySeries] = useState<HourBin[]>(
+    HOUR_LABELS.map((t) => ({ time: t, queries: 0 }))
+  );
+
+  useEffect(() => {
+    const loadHourly = async () => {
+      if (!user?.id) return;
+      try {
+        // get chat ids for user
+        const { data: chats, error: chatsErr } = await (supabase as any)
+          .from('chats')
+          .select('id')
+          .eq('user_id', user.id);
+        if (chatsErr) throw chatsErr;
+        const chatIds: string[] = (chats || []).map((c: any) => String(c.id));
+        if (chatIds.length === 0) {
+          setUserHourlySeries(HOUR_LABELS.map((t) => ({ time: t, queries: 0 })));
+          return;
+        }
+
+        // Today (local) from 00:00:00
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+
+        const { data: msgs, error: msgsErr } = await (supabase as any)
+          .from('messages')
+          .select('id, created_at, chat_id')
+          .in('chat_id', chatIds)
+          .gte('created_at', start.toISOString())
+          .order('created_at', { ascending: true });
+        if (msgsErr) throw msgsErr;
+
+        // Initialize bins 0..5 for 4-hour windows
+        const bins = [0, 0, 0, 0, 0, 0];
+        (msgs || []).forEach((m: any) => {
+          const d = new Date(m.created_at);
+          const hour = d.getHours();
+          const idx = Math.min(5, Math.max(0, Math.floor(hour / 4)));
+          bins[idx] += 1;
+        });
+        const series: HourBin[] = HOUR_LABELS.map((label, i) => ({ time: label, queries: bins[i] }));
+        setUserHourlySeries(series);
+      } catch (e) {
+        console.warn('No se pudo cargar consultas por hora:', e);
+        setUserHourlySeries(HOUR_LABELS.map((t) => ({ time: t, queries: 0 })));
+      }
+    };
+    loadHourly();
+  }, [user?.id]);
 
   const intentData = [
     { intent: 'Consulta Precios', count: 4500, percentage: 35 },
@@ -266,6 +380,143 @@ const Dashboard = () => {
 
   const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
   const totalProductQueries = productData.reduce((sum, p) => sum + p.queries, 0);
+
+  // Per-user totals (all time) and day-over-day change
+  const [userTotalQueries, setUserTotalQueries] = useState<number | null>(null);
+  const [userDailyChangePct, setUserDailyChangePct] = useState<number | null>(null);
+  const [loadingUserTotals, setLoadingUserTotals] = useState(false);
+
+  // Per-user CTR: percentage of responses where respuesta != "No tengo esa informacion en la base"
+  const [userCtrPct, setUserCtrPct] = useState<number | null>(null);
+  const [loadingCtr, setLoadingCtr] = useState(false);
+
+  useEffect(() => {
+    const loadUserTotals = async () => {
+      if (!user?.id) {
+        setUserTotalQueries(0);
+        setUserDailyChangePct(0);
+        return;
+      }
+      setLoadingUserTotals(true);
+      try {
+        // Obtener chats del usuario
+        const { data: chats, error: chatsErr } = await (supabase as any)
+          .from('chats')
+          .select('id')
+          .eq('user_id', user.id);
+        if (chatsErr) throw chatsErr;
+
+        const chatIds: string[] = (chats || []).map((c: any) => String(c.id));
+        // Si no tiene chats, los contadores deben ser 0
+
+        // Total del usuario (todo el tiempo)
+        const { count: uTotal, error: uTotalErr } = chatIds.length > 0
+          ? await (supabase as any).from('messages').select('id', { count: 'exact', head: true }).in('chat_id', chatIds)
+          : { count: 0 };
+        if (uTotalErr) throw uTotalErr;
+        setUserTotalQueries(uTotal ?? 0);
+
+        // Variación diaria (hoy vs ayer, tiempo local)
+        const now = new Date();
+        const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+        const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
+
+        const { count: uToday, error: uTodayErr } = chatIds.length > 0
+          ? await (supabase as any)
+              .from('messages')
+              .select('id', { count: 'exact', head: true })
+              .in('chat_id', chatIds)
+              .gte('created_at', todayStart.toISOString())
+          : { count: 0 };
+        if (uTodayErr) throw uTodayErr;
+
+        const { count: uYday, error: uYdayErr } = chatIds.length > 0
+          ? await (supabase as any)
+              .from('messages')
+              .select('id', { count: 'exact', head: true })
+              .in('chat_id', chatIds)
+              .gte('created_at', yesterdayStart.toISOString())
+              .lt('created_at', todayStart.toISOString())
+          : { count: 0 };
+        if (uYdayErr) throw uYdayErr;
+
+        let pct: number;
+        if ((uYday ?? 0) > 0) {
+          pct = (((uToday ?? 0) - (uYday ?? 0)) / (uYday ?? 1)) * 100;
+        } else {
+          pct = (uToday ?? 0) > 0 ? 100 : 0;
+        }
+        setUserDailyChangePct(pct);
+      } catch (e) {
+        console.warn('No se pudieron cargar los totales del usuario:', e);
+        setUserTotalQueries(0);
+        setUserDailyChangePct(0);
+      } finally {
+        setLoadingUserTotals(false);
+      }
+    };
+    loadUserTotals();
+  }, [user?.id]);
+
+  // Load per-user CTR (all time)
+  useEffect(() => {
+    const loadCtr = async () => {
+      if (!user?.id) {
+        setUserCtrPct(0);
+        return;
+      }
+      setLoadingCtr(true);
+      try {
+        const { data: chats, error: chatsErr } = await (supabase as any)
+          .from('chats')
+          .select('id')
+          .eq('user_id', user.id);
+        if (chatsErr) throw chatsErr;
+        const chatIds: string[] = (chats || []).map((c: any) => String(c.id));
+        if (chatIds.length === 0) {
+          setUserCtrPct(0);
+          return;
+        }
+
+        // Total messages for this user
+        const { count: totalCount, error: totalErr } = await (supabase as any)
+          .from('messages')
+          .select('id', { count: 'exact', head: true })
+          .in('chat_id', chatIds);
+        if (totalErr) throw totalErr;
+
+        // Count fallback "no info" responses with accent/spacing/punctuation variants.
+        // We use ILIKE with wildcards to match both "informacion" and "información",
+        // and any trailing punctuation.
+        const { count: fallbackCount, error: fbErr } = await (supabase as any)
+          .from('messages')
+          .select('id', { count: 'exact', head: true })
+          .in('chat_id', chatIds)
+          .ilike('respuesta', 'No tengo esa%informaci%n en la base%');
+        if (fbErr) throw fbErr;
+
+        // Count null or empty responses (not answered)
+        const { count: nullCount, error: nullErr } = await (supabase as any)
+          .from('messages')
+          .select('id', { count: 'exact', head: true })
+          .in('chat_id', chatIds)
+          .or('respuesta.is.null,respuesta.eq.');
+        if (nullErr) throw nullErr;
+
+        const t = totalCount ?? 0;
+        const unanswered = (fallbackCount ?? 0) + (nullCount ?? 0);
+        const answered = Math.max(0, t - unanswered);
+        const pct = t > 0 ? (answered / t) * 100 : 0;
+        setUserCtrPct(pct);
+      } catch (e) {
+        console.warn('No se pudo calcular CTR del usuario:', e);
+        setUserCtrPct(0);
+      } finally {
+        setLoadingCtr(false);
+      }
+    };
+    loadCtr();
+  }, [user?.id]);
 
   const handleDashboardQuery = async () => {
     if (!queryText.trim()) return;
@@ -454,10 +705,10 @@ const Dashboard = () => {
               <MessageSquare className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{kpiData.totalQueries.toLocaleString()}</div>
-              <Badge variant="outline" className="mt-2">
+              <div className="text-2xl font-bold">{loadingTotals ? '—' : (totalQueriesAllTime ?? 0).toLocaleString()}</div>
+              <Badge variant="outline" className={`mt-2 ${dailyChangePct !== null && dailyChangePct < 0 ? 'text-destructive' : ''}`}>
                 <TrendingUp className="h-3 w-3 mr-1" />
-                +12.5%
+                {dailyChangePct === null ? '—' : `${dailyChangePct >= 0 ? '+' : ''}${dailyChangePct.toFixed(1)}%`}
               </Badge>
             </CardContent>
           </Card>
@@ -465,14 +716,14 @@ const Dashboard = () => {
 
           <Card className="bg-gradient-card border-0 shadow-elevation">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Numero de Consultas</CardTitle>
+              <CardTitle className="text-sm font-medium">Número de sus consultas</CardTitle>
               <Clock className="h-4 w-4 text-secondary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{kpiData.p95Latency}ms</div>
-              <Badge variant="outline" className="mt-2">
+              <div className="text-2xl font-bold">{loadingUserTotals ? '—' : (userTotalQueries ?? 0).toLocaleString()}</div>
+              <Badge variant="outline" className={`mt-2 ${userDailyChangePct !== null && userDailyChangePct < 0 ? 'text-destructive' : ''}`}>
                 <TrendingUp className="h-3 w-3 mr-1" />
-                -8.7%
+                {userDailyChangePct === null ? '—' : `${userDailyChangePct >= 0 ? '+' : ''}${userDailyChangePct.toFixed(1)}%`}
               </Badge>
             </CardContent>
           </Card>
@@ -483,11 +734,7 @@ const Dashboard = () => {
               <Target className="h-4 w-4 text-success" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{kpiData.evidenceClickthrough}%</div>
-              <Badge variant="outline" className="mt-2">
-                <TrendingUp className="h-3 w-3 mr-1" />
-                +3.2%
-              </Badge>
+              <div className="text-2xl font-bold">{loadingCtr ? '—' : `${(userCtrPct ?? 0).toFixed(1)}%`}</div>
             </CardContent>
           </Card>
         </div>
@@ -584,7 +831,7 @@ const Dashboard = () => {
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
-                    <RechartsLineChart data={timeseriesData}>
+                    <RechartsLineChart data={userHourlySeries}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="time" />
                       <YAxis />
@@ -610,53 +857,32 @@ const Dashboard = () => {
                   <CardDescription>Aca estan las 5 ultimas consultas que ha realizado</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: 'black' }}
-                          ></div>
-                          <span className="font-medium">Consulta 1</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: 'black' }}
-                          ></div>
-                          <span className="font-medium">Consulta 2</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: 'black' }}
-                          ></div>
-                          <span className="font-medium">Consulta 3</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: 'black' }}
-                          ></div>
-                          <span className="font-medium">Consulta 4</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: 'black' }}
-                          ></div>
-                          <span className="font-medium">Consulta 5</span>
-                        </div>
-                      </div>
-                  </div>
+                  {loadingRecent ? (
+                    <div className="text-sm text-muted-foreground">Cargando…</div>
+                  ) : recentMsgs.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">Aún no hay consultas guardadas.</div>
+                  ) : (
+                    <div className="divide-y divide-border rounded-md border">
+                      {recentMsgs.map((m) => {
+                        const prompt = (m.prompt || '').toString();
+                        const respuesta = (m.respuesta || '').toString();
+                        const shortResp = respuesta.length > 160 ? `${respuesta.slice(0, 160)}…` : respuesta;
+                        return (
+                          <button
+                            key={m.id}
+                            onClick={() => handleOpenMessage(m.chat_id)}
+                            className="w-full text-left p-3 rounded-md hover:bg-primary/20 dark:hover:bg-primary/30 transition-colors"
+                            title={new Date(m.created_at).toLocaleString()}
+                          >
+                            <div className="text-sm font-medium text-foreground truncate">{prompt || '(sin contenido)'}</div>
+                            {shortResp && (
+                              <div className="text-xs text-muted-foreground mt-1 truncate">{shortResp}</div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
