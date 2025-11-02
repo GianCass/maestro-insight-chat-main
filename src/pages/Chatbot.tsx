@@ -39,8 +39,9 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Link, useNavigate } from "react-router-dom";
-import { generatePlot } from "@/api/plotlyService";
-import { PlotlyChart } from "@/components/PlotlyChart";
+// import { generatePlot } from "@/api/plotlyService";
+// import { PlotlyChart } from "@/components/PlotlyChart";
+import PlotlyRemoteChart from "@/components/PlotlyRemoteChart";
 import {
   Send,
   Bot,
@@ -95,6 +96,7 @@ type UIMessage = Omit<ChatMessage, "sources" | "items" | "result"> & {
   items?: ProductRow[];
   result?: AggregateResult;
   evidences?: Evidence[];
+  vizCode?: string; // código de visualización Plotly para render remoto
 };
 
 type PlotFigure = unknown;
@@ -195,9 +197,7 @@ const Chatbot = () => {
     null
   );
 
-  const [figure, setFigure] = useState<PlotFigure>(null);
-  const [figureQuery, setFigureQuery] = useState("");
-  const [isPlotLoading, setIsPlotLoading] = useState(false);
+  // Visualizaciones ahora se renderizan por mensaje con PlotlyRemoteChart
   // Emoji del usuario autenticado para el avatar de mensajes del lado derecho
   const [userEmoji, setUserEmoji] = useState<string>("🧑");
   // Chats del usuario
@@ -310,7 +310,7 @@ const Chatbot = () => {
 
       const { data, error } = await (supabase as any)
         .from("messages")
-        .select("id, prompt, respuesta, created_at")
+        .select("id, prompt, respuesta, visualizacion, created_at")
         .eq("chat_id", chatId)
         .order("created_at", { ascending: true });
 
@@ -332,6 +332,7 @@ const Chatbot = () => {
           role: "assistant",
           content: String(m.respuesta ?? ""),
           timestamp: m.created_at ?? new Date().toISOString(),
+          vizCode: m.visualizacion && m.visualizacion !== '-' ? String(m.visualizacion) : undefined,
         });
       });
 
@@ -402,12 +403,9 @@ const Chatbot = () => {
       // Actualizar estado local y storage
       setChats((prev) => prev.filter((c) => c.id !== chatId));
       if (selectedChatId === chatId) {
-        setSelectedChatId(null);
-        setMessages([]);
-        chatHistory.clear(sessionId);
-        setFigure(null);
-        setFigureQuery("");
-        setIsPlotLoading(false);
+  setSelectedChatId(null);
+  setMessages([]);
+  chatHistory.clear(sessionId);
       }
       try {
         const mapped = localStorage.getItem(`chatdb-${sessionId}`);
@@ -508,24 +506,13 @@ const Chatbot = () => {
         threshold: confidenceThreshold[0],
       });
       let finalAnswer = "";
+      let lastVizCode: string | undefined;
       for await (const part of stream) {
-      // ⬇️ Si el backend envía un prompt de visualización, disparamos Plotly
-          if (part.vizPrompt) {
-            setFigureQuery(part.vizPrompt);      // muestra el prompt en el input de la UI (opcional)
-            setIsPlotLoading(true);
-            // No bloqueamos el stream: disparamos en segundo plano
-            generatePlot(part.vizPrompt)
-              .then((fig) => setFigure(fig as PlotFigure))
-              .catch((err) => {
-                console.error("Error generando gráfica:", err);
-                toast({
-                  title: "No pude generar la visualización",
-                  description: "Revisa el prompt o el servicio de gráficas.",
-                  variant: "destructive",
-                });
-              })
-              .finally(() => setIsPlotLoading(false));
-          }
+        // ⬇️ Si el backend envía un prompt de visualización, lo adjuntamos al mensaje del asistente
+        if (part.vizPrompt) {
+          lastVizCode = part.vizPrompt;
+          setMessages((prev) => prev.map((msg) => msg.id === tempAssistantId ? { ...msg, vizCode: lastVizCode } : msg));
+        }
 
         if (typeof part.content === "string") {
           finalAnswer = part.content;
@@ -575,7 +562,7 @@ const Chatbot = () => {
               prompt: messageText,
               respuesta: finalAnswer || "",
               intencion: "-",
-              visualizacion: "-",
+              visualizacion: lastVizCode ?? "-",
               chat_id: chatId,
             });
         } else {
@@ -632,9 +619,7 @@ const Chatbot = () => {
     chatHistory.clear(sessionId);
 
   // Ocultar cualquier visualización dinámica previa
-  setFigure(null);
-  setFigureQuery("");
-  setIsPlotLoading(false);
+  // Limpiar posibles estados visuales del chat (no usados con render por mensaje)
 
     const initialMessage: UIMessage = {
       id: "1",
@@ -685,25 +670,7 @@ const Chatbot = () => {
     </Accordion>
   );
 
-  const handleGeneratePlot = async () => {
-    if (!figureQuery.trim()) return;
-    setIsPlotLoading(true);
-    setFigure(null);
-
-    try {
-      const res = await generatePlot(figureQuery);
-      setFigure(res as PlotFigure);
-    } catch (err) {
-      console.error("Error generando gráfica:", err);
-      toast({
-        title: "Error al generar visualización",
-        description: "No se pudo obtener la gráfica desde el servidor.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsPlotLoading(false);
-    }
-  };
+  // Generación manual de gráficos movida a render por mensaje
 
   return (
     <div className="min-h-screen bg-background">
@@ -768,15 +735,21 @@ const Chatbot = () => {
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          className="inline-flex items-center justify-center h-6 w-6 rounded opacity-0 group-hover:opacity-100 hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary"
                           title={new Date(c.created_at).toLocaleString()}
                           onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              (e.currentTarget as HTMLElement).click();
+                            }
+                          }}
                         >
                           <MoreVertical className={`h-3 w-3 ${selectedChatId === c.id ? 'text-primary-foreground' : ''}`} />
-                        </Button>
+                        </span>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenuLabel>Opciones</DropdownMenuLabel>
@@ -917,6 +890,12 @@ const Chatbot = () => {
                                 </div>
                               )}
 
+                            {message.vizCode && (
+                              <div className="mt-3">
+                                <PlotlyRemoteChart code={message.vizCode} text={message.content} />
+                              </div>
+                            )}
+
                             {Array.isArray(message.sources) &&
                               message.sources.length > 0 && (
                                 <div className="mt-3 text-xs text-gray-600">
@@ -1025,31 +1004,7 @@ const Chatbot = () => {
               )}
               <div ref={messagesEndRef} />
 
-              {/* Área de visualizaciones */}
-              <div className="border-t border-border p-4">
-                <div className="max-w-4xl mx-auto space-y-4">
-                  {/* <h4 className="font-medium text-sm text-muted-foreground">
-                    Generar visualización dinámica
-                  </h4>
-                  <div className="flex gap-2">
-                    <Input
-                      value={figureQuery}
-                      onChange={(e) => setFigureQuery(e.target.value)}
-                      placeholder="Ej: Evolución de precios de tecnología en Q2"
-                      className="flex-1"
-                    />
-                    <Button
-                      onClick={handleGeneratePlot}
-                      disabled={isPlotLoading || !figureQuery.trim()}
-                      variant="outline"
-                    >
-                      {isPlotLoading ? "Generando..." : "Visualizar"}
-                    </Button>
-                  </div> */}
-
-                  {figure && <PlotlyChart figure={figure} />}
-                </div>
-              </div>
+              {/* Las visualizaciones ahora se renderizan dentro de cada mensaje del asistente usando vizCode */}
             </div>
           </ScrollArea>
 
