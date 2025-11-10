@@ -192,7 +192,7 @@ const Chatbot = () => {
   const [confidenceThreshold, setConfidenceThreshold] = useState<number[]>([
     0.7,
   ]);
-  const [selectedModel, setSelectedModel] = useState("llama3:8b");
+  const [selectedModel, setSelectedModel] = useState("phi3:mini");
   const [retryRequest, setRetryRequest] = useState<{ message: string } | null>(
     null
   );

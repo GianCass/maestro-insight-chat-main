@@ -441,10 +441,13 @@ const Dashboard = () => {
         if (uYdayErr) throw uYdayErr;
 
         let pct: number;
-        if ((uYday ?? 0) > 0) {
-          pct = (((uToday ?? 0) - (uYday ?? 0)) / (uYday ?? 1)) * 100;
+        const todayVal = uToday ?? 0;
+        const yesterdayVal = uYday ?? 0;
+        if (yesterdayVal > 0) {
+          pct = ((todayVal - yesterdayVal) / yesterdayVal) * 100;
         } else {
-          pct = (uToday ?? 0) > 0 ? 100 : 0;
+          // Si ayer fue 0, usamos hoy * 100 (ej: hoy=2 => 200%)
+          pct = todayVal > 0 ? todayVal * 100 : 0;
         }
         setUserDailyChangePct(pct);
       } catch (e) {
@@ -813,9 +816,8 @@ const Dashboard = () => {
 
         {/* Charts Section */}
         <Tabs defaultValue="timeseries" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="timeseries">Series Temporales</TabsTrigger>
-            <TabsTrigger value="intents">Intenciones</TabsTrigger>
             <TabsTrigger value="products">Productos</TabsTrigger>
           </TabsList>
 
@@ -888,7 +890,7 @@ const Dashboard = () => {
             </div>
           </TabsContent>
 
-          <TabsContent value="intents" className="space-y-4">
+          {/* <TabsContent value="intents" className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <Card>
                 <CardHeader>
@@ -946,7 +948,7 @@ const Dashboard = () => {
                 </CardContent>
               </Card>
             </div>
-          </TabsContent>
+          </TabsContent> */}
 
           <TabsContent value="products" className="space-y-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

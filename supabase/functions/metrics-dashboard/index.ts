@@ -73,10 +73,13 @@ serve(async (req: Request) => {
     if (yErr) throw yErr;
 
     let dailyChangePct = 0;
-    if ((yesterdayCount ?? 0) > 0) {
-      dailyChangePct = (((todayCount ?? 0) - (yesterdayCount ?? 0)) / (yesterdayCount ?? 1)) * 100;
+    const tVal = todayCount ?? 0;
+    const yVal = yesterdayCount ?? 0;
+    if (yVal > 0) {
+      dailyChangePct = ((tVal - yVal) / yVal) * 100;
     } else {
-      dailyChangePct = (todayCount ?? 0) > 0 ? 100 : 0;
+      // Si ayer 0, multiplicar hoy * 100 (ej: hoy=2 => 200%)
+      dailyChangePct = tVal > 0 ? tVal * 100 : 0;
     }
 
     return new Response(
