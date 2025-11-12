@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
@@ -29,8 +29,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Accordion,
@@ -39,22 +37,17 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Link, useNavigate } from "react-router-dom";
-// import { generatePlot } from "@/api/plotlyService";
-// import { PlotlyChart } from "@/components/PlotlyChart";
 import PlotlyRemoteChart from "@/components/PlotlyRemoteChart";
 import {
   Send,
   Bot,
   User,
-  Settings,
-  MessageSquare,
   Home,
   Plus,
   MoreVertical,
   ExternalLink,
   RefreshCw,
   AlertCircle,
-  Brain,
 } from "lucide-react";
 import UserAvatarLink from "@/components/UserAvatarLink";
 
@@ -89,14 +82,13 @@ type UISource = {
 };
 
 // Mensaje enriquecido para el front
-// Omitimos 'sources', 'items' y 'result' del ChatMessage base para tiparlos a la medida de la UI
 type UIMessage = Omit<ChatMessage, "sources" | "items" | "result"> & {
   sources?: UISource[];
   type?: ChatIntentType;
   items?: ProductRow[];
   result?: AggregateResult;
   evidences?: Evidence[];
-  vizCode?: string; // código de visualización Plotly para render remoto
+  vizCode?: string;
 };
 
 type PlotFigure = unknown;
@@ -156,29 +148,12 @@ const toProductRows = (arr?: unknown): ProductRow[] | undefined => {
   });
 };
 
-// Valida que un valor sea AggregateResult (evita error "groups is missing")
-const toAggregateResult = (
-  val: unknown
-): AggregateResult | undefined => {
+// Valida que un valor sea AggregateResult
+const toAggregateResult = (val: unknown): AggregateResult | undefined => {
   if (!val || typeof val !== "object") return undefined;
   const obj = val as { groups?: unknown };
   if (!Array.isArray(obj.groups)) return undefined;
-  // Si tu AggregateResult exige otras props, añádelas aquí como guards.
   return val as AggregateResult;
-};
-
-// Elimina fences ``` y lenguajes para almacenar sólo texto plano en Supabase
-const stripCodeFences = (raw: string): string => {
-  if (!raw) return raw;
-  // Quitar bloques triple backtick (posibles múltiples)
-  let cleaned = raw.replace(/```(?:[a-zA-Z0-9_-]+)?\n?[\s\S]*?```/g, (m) => {
-    // Extraer contenido interno sin los backticks
-    const inner = m.replace(/^```(?:[a-zA-Z0-9_-]+)?\n?/, "").replace(/```$/, "");
-    return inner.trim();
-  });
-  // También remover líneas que sólo sean ```
-  cleaned = cleaned.replace(/^```\s*$/gm, "");
-  return cleaned.trim();
 };
 
 /* ======================= Componente ======================= */
@@ -202,16 +177,15 @@ const Chatbot = () => {
   const [currentMessage, setCurrentMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [strictMode, setStrictMode] = useState(false);
   const [confidenceThreshold, setConfidenceThreshold] = useState<number[]>([
     0.7,
   ]);
+  const [strictMode, setStrictMode] = useState(false);
   const [selectedModel, setSelectedModel] = useState("phi3:mini");
   const [retryRequest, setRetryRequest] = useState<{ message: string } | null>(
     null
   );
 
-  // Visualizaciones ahora se renderizan por mensaje con PlotlyRemoteChart
   // Emoji del usuario autenticado para el avatar de mensajes del lado derecho
   const [userEmoji, setUserEmoji] = useState<string>("🧑");
   // Chats del usuario
@@ -219,7 +193,7 @@ const Chatbot = () => {
   const [chats, setChats] = useState<ChatRow[]>([]);
   const [loadingChats, setLoadingChats] = useState(false);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
-  // ID del chat en Supabase para esta sesión (se define al primer mensaje)
+  // ID del chat en Supabase para esta sesión
   const [chatDbId, setChatDbId] = useState<string | null>(() => {
     try {
       return localStorage.getItem(`chatdb-${sessionId}`);
@@ -243,7 +217,7 @@ const Chatbot = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Auth guard: redirect to login if not authenticated
+  // Auth guard
   useEffect(() => {
     if (!loading && !user) {
       navigate("/login");
@@ -273,7 +247,7 @@ const Chatbot = () => {
     loadChats();
   }, [user?.id]);
 
-  // Cargar emoji del usuario autenticado para usarlo como avatar en mensajes del usuario
+  // Cargar emoji del usuario
   useEffect(() => {
     const loadEmoji = async () => {
       if (!user?.id) {
@@ -298,29 +272,34 @@ const Chatbot = () => {
     loadEmoji();
   }, [user?.id]);
 
-  // Restaurar último chat seleccionado tras recarga o navegación desde Settings
+  // Restaurar último chat seleccionado
   useEffect(() => {
     if (!user?.id) return;
-    if (selectedChatId) return; // ya hay uno seleccionado
-    if (messages.length > 0) return; // si ya hay mensajes (p.ej., nueva conversación), no restaurar
+    if (selectedChatId) return;
+    if (messages.length > 0) return;
     try {
-      // Priorizar 'last-chat-id' (acción explícita del usuario desde Settings) sobre el mapeo de sesión
-      const saved = localStorage.getItem('last-chat-id') || localStorage.getItem(`chatdb-${sessionId}`);
+      const saved =
+        localStorage.getItem("last-chat-id") ||
+        localStorage.getItem(`chatdb-${sessionId}`);
       if (saved) {
-        // Abrir automáticamente el último chat
         void openChat(saved);
       }
-    } catch { /* noop */ }
+    } catch {
+      /* noop */
+    }
   }, [user?.id, sessionId, selectedChatId, messages.length]);
 
-  // Seleccionar un chat: cargar historial de mensajes y fijar mapping de chat_id
+  // Abrir chat existente
   const openChat = async (chatId: string) => {
     setSelectedChatId(chatId);
-    try { localStorage.setItem('last-chat-id', chatId); } catch {}
     try {
-      // Persist mapping a esta sesión
+      localStorage.setItem("last-chat-id", chatId);
+    } catch {}
+    try {
       setChatDbId(chatId);
-      try { localStorage.setItem(`chatdb-${sessionId}`, chatId); } catch {}
+      try {
+        localStorage.setItem(`chatdb-${sessionId}`, chatId);
+      } catch {}
 
       const { data, error } = await (supabase as any)
         .from("messages")
@@ -331,7 +310,6 @@ const Chatbot = () => {
       if (error) throw error;
 
       const history: UIMessage[] = [];
-      // Reconstruimos como pares user -> assistant
       (data || []).forEach((m: any) => {
         if (m.prompt) {
           history.push({
@@ -346,21 +324,26 @@ const Chatbot = () => {
           role: "assistant",
           content: String(m.respuesta ?? ""),
           timestamp: m.created_at ?? new Date().toISOString(),
-          vizCode: m.visualizacion && m.visualizacion !== '-' ? String(m.visualizacion) : undefined,
+          vizCode:
+            m.visualizacion && m.visualizacion !== "-"
+              ? String(m.visualizacion)
+              : undefined,
         });
       });
 
-      // Si no hay mensajes, mostrar el saludo inicial
-      const initialIfEmpty: UIMessage[] = history.length > 0 ? history : [
-        {
-          id: "1",
-          role: "assistant",
-          content:
-            "¡Hola! Soy Pricy, tu asistente de análisis de retail. Puedo ayudarte con datos de precios, tendencias del mercado y análisis de productos. ¿En qué puedo ayudarte hoy?",
-          timestamp: new Date().toISOString(),
-          confidence: 0.95,
-        },
-      ];
+      const initialIfEmpty: UIMessage[] =
+        history.length > 0
+          ? history
+          : [
+              {
+                id: "1",
+                role: "assistant",
+                content:
+                  "¡Hola! Soy Pricy, tu asistente de análisis de retail. Puedo ayudarte con datos de precios, tendencias del mercado y análisis de productos. ¿En qué puedo ayudarte hoy?",
+                timestamp: new Date().toISOString(),
+                confidence: 0.95,
+              },
+            ];
 
       setMessages(initialIfEmpty);
       chatHistory.save(sessionId, initialIfEmpty);
@@ -380,7 +363,11 @@ const Chatbot = () => {
   const handleConfirmRename = async () => {
     const title = renameTitle.trim();
     if (!renameChatId || title.length === 0) {
-      toast({ title: "Título inválido", description: "Escribe un nombre para el chat.", variant: "destructive" });
+      toast({
+        title: "Título inválido",
+        description: "Escribe un nombre para el chat.",
+        variant: "destructive",
+      });
       return;
     }
     try {
@@ -390,7 +377,9 @@ const Chatbot = () => {
         .eq("id", renameChatId);
       if (error) throw error;
 
-      setChats((prev) => prev.map((c) => (c.id === renameChatId ? { ...c, title } : c)));
+      setChats((prev) =>
+        prev.map((c) => (c.id === renameChatId ? { ...c, title } : c))
+      );
       setRenameDialogOpen(false);
       setRenameChatId(null);
       toast({ title: "Chat renombrado" });
@@ -409,17 +398,18 @@ const Chatbot = () => {
     if (!deleteChatId) return;
     const chatId = deleteChatId;
     try {
-      // Primero borrar mensajes; luego el chat
       await (supabase as any).from("messages").delete().eq("chat_id", chatId);
-      const { error } = await (supabase as any).from("chats").delete().eq("id", chatId);
+      const { error } = await (supabase as any)
+        .from("chats")
+        .delete()
+        .eq("id", chatId);
       if (error) throw error;
 
-      // Actualizar estado local y storage
       setChats((prev) => prev.filter((c) => c.id !== chatId));
       if (selectedChatId === chatId) {
-  setSelectedChatId(null);
-  setMessages([]);
-  chatHistory.clear(sessionId);
+        setSelectedChatId(null);
+        setMessages([]);
+        chatHistory.clear(sessionId);
       }
       try {
         const mapped = localStorage.getItem(`chatdb-${sessionId}`);
@@ -427,12 +417,14 @@ const Chatbot = () => {
           localStorage.removeItem(`chatdb-${sessionId}`);
           setChatDbId(null);
         }
-        const last = localStorage.getItem('last-chat-id');
+        const last = localStorage.getItem("last-chat-id");
         if (last === chatId) {
-          localStorage.removeItem('last-chat-id');
+          localStorage.removeItem("last-chat-id");
         }
         localStorage.removeItem(`vizprompt-${chatId}`);
-      } catch { /* noop */ }
+      } catch {
+        /* noop */
+      }
 
       toast({ title: "Chat eliminado" });
     } catch (e) {
@@ -461,7 +453,6 @@ const Chatbot = () => {
     try {
       const existingId = chatDbId ?? localStorage.getItem(`chatdb-${sessionId}`);
       if (!existingId) {
-        // Usar el primer prompt completo del usuario como título del chat
         const title = messageText.trim() || "Conversación";
         const { data, error } = await (supabase as any)
           .from("chats")
@@ -474,10 +465,12 @@ const Chatbot = () => {
           setSelectedChatId(newId);
           try {
             localStorage.setItem(`chatdb-${sessionId}`, newId);
-            localStorage.setItem('last-chat-id', newId);
+            localStorage.setItem("last-chat-id", newId);
           } catch {}
-          // Refrescar la lista en memoria sin recargar
-          setChats((prev) => [{ id: newId, title, created_at: new Date().toISOString() }, ...prev]);
+          setChats((prev) => [
+            { id: newId, title, created_at: new Date().toISOString() },
+            ...prev,
+          ]);
         }
       }
     } catch (e) {
@@ -522,25 +515,31 @@ const Chatbot = () => {
       let finalAnswer = "";
       let lastVizCode: string | undefined;
       for await (const part of stream) {
-        // Guardar prompt de visualización pero NO renderizar hasta el final
         if (part.vizPrompt) {
           lastVizCode = part.vizPrompt;
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === tempAssistantId ? { ...msg, vizCode: lastVizCode } : msg
+            )
+          );
         }
 
         if (typeof part.content === "string") {
-          finalAnswer = part.content; // part.content ya es el acumulado completo (accText)
+          finalAnswer = part.content;
         }
 
-        // Actualizar el mensaje temporal del asistente con contenido (acumulado) y metadatos, sin vizCode todavía
         setMessages((prev) => {
-          const next = prev.map((msg) => {
+          const next: UIMessage[] = prev.map((msg) => {
             if (msg.id !== tempAssistantId) return msg;
 
-            const unifiedSources = normalizeSources(part.sources ?? msg.sources) ?? msg.sources;
-            return {
+            const unifiedSources =
+              normalizeSources(part.sources ?? msg.sources) ?? msg.sources;
+
+            const updated: UIMessage = {
               ...msg,
               content: part.content ?? msg.content,
-              confidence: part.confidence !== undefined ? part.confidence : msg.confidence,
+              confidence:
+                part.confidence !== undefined ? part.confidence : msg.confidence,
               sources: unifiedSources,
               evidences: unifiedSources?.map((src) => ({
                 id: src.id,
@@ -553,47 +552,27 @@ const Chatbot = () => {
               type: part.type ?? msg.type,
               items: toProductRows(part.items) ?? msg.items,
               result: toAggregateResult(part.result) ?? msg.result,
-            } as UIMessage;
+            };
+
+            return updated;
           });
+
           chatHistory.save(sessionId, next);
           return next;
         });
       }
 
-      // Finalizar: limpiar fences y ahora sí anexar la visualización
-      const cleanedAnswer = stripCodeFences(finalAnswer);
-      setMessages((prev) => {
-        const next = prev.map((msg) => msg.id === tempAssistantId ? { ...msg, content: cleanedAnswer, vizCode: lastVizCode } : msg);
-        chatHistory.save(sessionId, next);
-        return next;
-      });
-
       // Guardar el mensaje en Supabase una vez que termina el stream
       try {
         const chatId = chatDbId ?? localStorage.getItem(`chatdb-${sessionId}`);
         if (chatId) {
-          const payload = {
+          await (supabase as any).from("messages").insert({
             prompt: messageText,
-            respuesta: cleanedAnswer || "",
+            respuesta: finalAnswer || "",
             intencion: "-",
             visualizacion: lastVizCode ?? "-",
             chat_id: chatId,
-          };
-          let saved = false;
-          for (let attempt = 1; attempt <= 3 && !saved; attempt++) {
-            const { error } = await (supabase as any).from("messages").insert(payload);
-            if (!error) {
-              saved = true;
-              console.log(`Mensaje guardado en Supabase (intento ${attempt})`);
-            } else {
-              console.warn(`Fallo guardando mensaje (intento ${attempt}):`, error);
-              // Pequeño backoff progresivo
-              await new Promise((r) => setTimeout(r, 250 * attempt));
-            }
-          }
-          if (!saved) {
-            console.error("No se pudo guardar el mensaje tras reintentos");
-          }
+          });
         } else {
           console.warn("No se encontró chat_id para guardar el mensaje");
         }
@@ -636,19 +615,18 @@ const Chatbot = () => {
 
   const handleNewConversation = () => {
     const newSessionId = generateSessionId();
-    // Persist new session id and reset mapping
     localStorage.setItem("pricing-session", newSessionId);
-    try { localStorage.removeItem(`chatdb-${sessionId}`); } catch {}
-    try { localStorage.removeItem('last-chat-id'); } catch {}
+    try {
+      localStorage.removeItem(`chatdb-${sessionId}`);
+    } catch {}
+    try {
+      localStorage.removeItem("last-chat-id");
+    } catch {}
 
-    // Update stateful session id to avoid reloading the page
     setSessionId(newSessionId);
     setSelectedChatId(null);
     setChatDbId(null);
     chatHistory.clear(sessionId);
-
-  // Ocultar cualquier visualización dinámica previa
-  // Limpiar posibles estados visuales del chat (no usados con render por mensaje)
 
     const initialMessage: UIMessage = {
       id: "1",
@@ -699,8 +677,6 @@ const Chatbot = () => {
     </Accordion>
   );
 
-  // Generación manual de gráficos movida a render por mensaje
-
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -713,7 +689,7 @@ const Chatbot = () => {
               </Button>
             </Link>
             <div className="flex items-center space-x-2">
-              <img className='h-10 w-10' src={logoImage} alt="Logo" />
+              <img className="h-10 w-10" src={logoImage} alt="Logo" />
               <span className="text-lg font-semibold">Chatbot SPI</span>
             </div>
           </div>
@@ -739,7 +715,6 @@ const Chatbot = () => {
               Nueva Conversación
             </Button>
 
-
             <div>
               <h3 className="text-sm font-medium mb-3">Tus Chats</h3>
               <div className="space-y-2">
@@ -747,52 +722,71 @@ const Chatbot = () => {
                   <div className="text-xs text-muted-foreground">Cargando…</div>
                 )}
                 {!loadingChats && chats.length === 0 && (
-                  <div className="text-xs text-muted-foreground">Aún no tienes chats.</div>
+                  <div className="text-xs text-muted-foreground">
+                    Aún no tienes chats.
+                  </div>
                 )}
-                {!loadingChats && chats.map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => openChat(c.id)}
-                    className={`w-full p-3 rounded-md group flex items-center justify-between text-left
-                      ${selectedChatId === c.id
-                        ? 'bg-primary text-primary-foreground'
-                        : 'hover:bg-primary/20 dark:hover:bg-primary/30'}`}
-                  >
-                    <div className="flex items-center space-x-2">
-                      <MessageSquare className={`h-5 w-5 ${selectedChatId === c.id ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
-                      <span className="text-sm break-words whitespace-normal">{c.title || 'Conversación'}</span>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <span
-                          role="button"
-                          tabIndex={0}
-                          className="inline-flex items-center justify-center h-6 w-6 rounded opacity-0 group-hover:opacity-100 hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary"
-                          title={new Date(c.created_at).toLocaleString()}
-                          onClick={(e) => e.stopPropagation()}
-                          onKeyDown={(e) => {
-                            e.stopPropagation();
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              (e.currentTarget as HTMLElement).click();
-                            }
-                          }}
-                        >
-                          <MoreVertical className={`h-3 w-3 ${selectedChatId === c.id ? 'text-primary-foreground' : ''}`} />
+                {!loadingChats &&
+                  chats.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => openChat(c.id)}
+                      className={`w-full p-3 rounded-md group flex items-center justify-between text-left
+                      ${
+                        selectedChatId === c.id
+                          ? "bg-primary text-primary-foreground"
+                          : "hover:bg-primary/20 dark:hover:bg-primary/30"
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2">
+                        <User className={`h-5 w-5 ${selectedChatId === c.id ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
+                        <span className="text-sm break-words whitespace-normal">
+                          {c.title || "Conversación"}
                         </span>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenuLabel>Opciones</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => openRenameDialog(c.id, c.title)}>
-                          Renombrar
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => openDeleteConfirm(c.id)}>
-                          Eliminar
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </button>
-                ))}
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            className="inline-flex items-center justify-center h-6 w-6 rounded opacity-0 group-hover:opacity-100 hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary"
+                            title={new Date(c.created_at).toLocaleString()}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => {
+                              e.stopPropagation();
+                              if (e.key === "Enter" || e.key === " ") {
+                                (e.currentTarget as HTMLElement).click();
+                              }
+                            }}
+                          >
+                            <MoreVertical
+                              className={`h-3 w-3 ${
+                                selectedChatId === c.id ? "text-primary-foreground" : ""
+                              }`}
+                            />
+                          </span>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <DropdownMenuLabel>Opciones</DropdownMenuLabel>
+                          <DropdownMenuItem
+                            onClick={() => openRenameDialog(c.id, c.title)}
+                          >
+                            Renombrar
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => openDeleteConfirm(c.id)}
+                          >
+                            Eliminar
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </button>
+                  ))}
               </div>
             </div>
           </div>
@@ -808,171 +802,176 @@ const Chatbot = () => {
                   <div className="mb-4">
                     <Bot className="h-10 w-10 text-primary mx-auto" />
                   </div>
-                  <h3 className="text-lg font-semibold text-foreground mb-2">Bienvenido al Chatbot, soy Pricy!</h3>
-                  <p className="max-w-md mb-4">Selecciona un chat en la barra lateral para ver tus consultas, o crea una nueva conversación.</p>
+                  <h3 className="text-lg font-semibold text-foreground mb-2">
+                    Bienvenido al Chatbot, soy Pricy!
+                  </h3>
+                  <p className="max-w-md mb-4">
+                    Selecciona un chat en la barra lateral para ver tus
+                    consultas, o crea una nueva conversación.
+                  </p>
                   <Button variant="default" onClick={handleNewConversation}>
                     <Plus className="h-4 w-4 mr-2" />
                     Nueva Conversación
                   </Button>
                 </div>
               ) : (
-              messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex gap-4 ${message.role === "user" ? "justify-end" : ""}`}
-                >
-                  {message.role === "assistant" && (
-                    <div className="flex-shrink-0">
-                      <div className="w-8 h-8 rounded-full bg-gradient-primary flex items-center justify-center">
-                        <Bot className="h-4 w-4 text-white" />
-                      </div>
-                    </div>
-                  )}
-
-                  <div className={`max-w-2xl ${message.role === "user" ? "order-2" : ""}`}>
-                    <Card
-                      className={`${
-                        message.role === "user"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-card"
-                      }`}
-                    >
-                      <CardContent className="p-4">
-                        <div className="prose prose-sm max-w-none">
-                          {message.content.split("\n").map((line, index) => {
-                            if (line.startsWith("**") && line.endsWith("**")) {
-                              return (
-                                <h4 key={index} className="font-semibold my-2">
-                                  {line.slice(2, -2)}
-                                </h4>
-                              );
-                            }
-                            return (
-                              <p key={index} className="mb-2">
-                                {line}
-                              </p>
-                            );
-                          })}
+                messages.map((message) => (
+                  <div
+                    key={message.id}
+                    className={`flex gap-4 ${
+                      message.role === "user" ? "justify-end" : ""
+                    }`}
+                  >
+                    {message.role === "assistant" && (
+                      <div className="flex-shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-gradient-primary flex items-center justify-center">
+                          <Bot className="h-4 w-4 text-white" />
                         </div>
-
-                        {message.role === "assistant" && (
-                          <>
-                            {message.confidence !== undefined && (
-                              <div className="flex items-center gap-2 mt-3">
-                                <Badge variant="secondary" className="text-xs">
-                                  Confianza: {(message.confidence * 100).toFixed(0)}%
-                                </Badge>
-                              </div>
-                            )}
-
-                            {message.evidences && message.evidences.length > 0 && (
-                              <EvidenceChips evidences={message.evidences} />
-                            )}
-
-                            {message.type === "table" &&
-                              Array.isArray(message.items) &&
-                              message.items.length > 0 && (
-                                <div className="mt-3 border border-gray-200 rounded-lg overflow-hidden shadow-sm">
-                                  <table className="min-w-full text-sm text-left border-collapse">
-                                    <thead className="bg-gray-100 text-gray-700">
-                                      <tr>
-                                        <th className="px-4 py-2">Producto</th>
-                                        <th className="px-4 py-2">Marca</th>
-                                        <th className="px-4 py-2">Tienda</th>
-                                        <th className="px-4 py-2 text-right">Precio</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {message.items?.map((item, idx) => (
-                                        <tr key={idx} className="border-t">
-                                          <td className="px-4 py-2">
-                                            {item.url ? (
-                                              <a
-                                                href={item.url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-blue-600 hover:underline"
-                                              >
-                                                {item.name}
-                                              </a>
-                                            ) : (
-                                              item.name
-                                            )}
-                                          </td>
-                                          <td className="px-4 py-2">
-                                            {item.brand ?? "-"}
-                                          </td>
-                                          <td className="px-4 py-2">
-                                            {item.store ?? "-"}
-                                          </td>
-                                          <td className="px-4 py-2 text-right font-semibold">
-                                            {item.price !== undefined
-                                              ? `${item.price.toLocaleString(
-                                                  "es-CO"
-                                                )} ${item.currency ?? ""}`
-                                              : "-"}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )}
-
-                            {message.vizCode && (
-                              <div className="mt-3">
-                                <PlotlyRemoteChart code={message.vizCode} text={message.content} />
-                              </div>
-                            )}
-
-                            {Array.isArray(message.sources) &&
-                              message.sources.length > 0 && (
-                                <div className="mt-3 text-xs text-gray-600">
-                                  <p className="font-semibold mb-1">📚 Fuentes:</p>
-                                  <ul className="list-disc pl-5">
-                                    {message.sources.map((src, i) => (
-                                      <li key={i}>
-                                        {src.url ? (
-                                          <a
-                                            href={src.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-blue-600 hover:underline"
-                                          >
-                                            {src.title}
-                                          </a>
-                                        ) : (
-                                          <span>{src.title}</span>
-                                        )}
-                                        {src.score !== undefined && (
-                                          <span className="ml-2 text-gray-400">
-                                            ({(src.score * 100).toFixed(0)}% confianza)
-                                          </span>
-                                        )}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
-
-                            <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                              <span>modelo: {selectedModel}</span>
-                            </div>
-                          </>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  {message.role === "user" && (
-                    <div className="flex-shrink-0 order-3">
-                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-base">
-                        <span aria-hidden>{userEmoji}</span>
                       </div>
+                    )}
+
+                    <div
+                      className={`max-w-2xl ${message.role === "user" ? "order-2" : ""}`}
+                    >
+                      <Card
+                        className={`${
+                          message.role === "user"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-card"
+                        }`}
+                      >
+                        <CardContent className="p-4">
+                          {/* === FIX: respetar saltos de línea y espacios === */}
+                          <div className="chat-message">{message.content}</div>
+
+                          {message.role === "assistant" && (
+                            <>
+                              {message.confidence !== undefined && (
+                                <div className="flex items-center gap-2 mt-3">
+                                  <Badge variant="secondary" className="text-xs">
+                                    Confianza:{" "}
+                                    {(message.confidence * 100).toFixed(0)}%
+                                  </Badge>
+                                </div>
+                              )}
+
+                              {message.evidences &&
+                                message.evidences.length > 0 && (
+                                  <EvidenceChips evidences={message.evidences} />
+                                )}
+
+                              {message.type === "table" &&
+                                Array.isArray(message.items) &&
+                                message.items.length > 0 && (
+                                  <div className="mt-3 border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                                    <table className="min-w-full text-sm text-left border-collapse">
+                                      <thead className="bg-gray-100 text-gray-700">
+                                        <tr>
+                                          <th className="px-4 py-2">Producto</th>
+                                          <th className="px-4 py-2">Marca</th>
+                                          <th className="px-4 py-2">Tienda</th>
+                                          <th className="px-4 py-2 text-right">
+                                            Precio
+                                          </th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {message.items?.map((item, idx) => (
+                                          <tr key={idx} className="border-t">
+                                            <td className="px-4 py-2">
+                                              {item.url ? (
+                                                <a
+                                                  href={item.url}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="text-blue-600 hover:underline"
+                                                >
+                                                  {item.name}
+                                                </a>
+                                              ) : (
+                                                item.name
+                                              )}
+                                            </td>
+                                            <td className="px-4 py-2">
+                                              {item.brand ?? "-"}
+                                            </td>
+                                            <td className="px-4 py-2">
+                                              {item.store ?? "-"}
+                                            </td>
+                                            <td className="px-4 py-2 text-right font-semibold">
+                                              {item.price !== undefined
+                                                ? `${item.price.toLocaleString(
+                                                    "es-CO"
+                                                  )} ${item.currency ?? ""}`
+                                                : "-"}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+
+                              {message.vizCode && (
+                                <div className="mt-3">
+                                  <PlotlyRemoteChart
+                                    code={message.vizCode}
+                                    text={message.content}
+                                  />
+                                </div>
+                              )}
+
+                              {Array.isArray(message.sources) &&
+                                message.sources.length > 0 && (
+                                  <div className="mt-3 text-xs text-gray-600">
+                                    <p className="font-semibold mb-1">
+                                      📚 Fuentes:
+                                    </p>
+                                    <ul className="list-disc pl-5">
+                                      {message.sources.map((src, i) => (
+                                        <li key={i}>
+                                          {src.url ? (
+                                            <a
+                                              href={src.url}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="text-blue-600 hover:underline"
+                                            >
+                                              {src.title}
+                                            </a>
+                                          ) : (
+                                            <span>{src.title}</span>
+                                          )}
+                                          {src.score !== undefined && (
+                                            <span className="ml-2 text-gray-400">
+                                              ({(src.score * 100).toFixed(0)}%
+                                              confianza)
+                                            </span>
+                                          )}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+
+                              <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                                <span>modelo: {selectedModel}</span>
+                              </div>
+                            </>
+                          )}
+                        </CardContent>
+                      </Card>
                     </div>
-                  )}
-                </div>
-              ))
+
+                    {message.role === "user" && (
+                      <div className="flex-shrink-0 order-3">
+                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-base">
+                          <span aria-hidden>{userEmoji}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
               )}
 
               {(isLoading || isStreaming) && (
@@ -1021,7 +1020,9 @@ const Chatbot = () => {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleSendMessage(retryRequest?.message ?? "")}
+                          onClick={() =>
+                            handleSendMessage(retryRequest?.message ?? "")
+                          }
                         >
                           <RefreshCw className="h-4 w-4 mr-2" />
                           Reintentar
@@ -1032,8 +1033,6 @@ const Chatbot = () => {
                 </div>
               )}
               <div ref={messagesEndRef} />
-
-              {/* Las visualizaciones ahora se renderizan dentro de cada mensaje del asistente usando vizCode */}
             </div>
           </ScrollArea>
 
@@ -1075,7 +1074,9 @@ const Chatbot = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Renombrar chat</DialogTitle>
-            <DialogDescription>Escribe un nuevo título para esta conversación.</DialogDescription>
+            <DialogDescription>
+              Escribe un nuevo título para esta conversación.
+            </DialogDescription>
           </DialogHeader>
           <div className="mt-2">
             <Input
@@ -1085,7 +1086,12 @@ const Chatbot = () => {
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameDialogOpen(false)}>Cancelar</Button>
+            <Button
+              variant="outline"
+              onClick={() => setRenameDialogOpen(false)}
+            >
+              Cancelar
+            </Button>
             <Button onClick={handleConfirmRename}>Guardar</Button>
           </DialogFooter>
         </DialogContent>
@@ -1097,12 +1103,13 @@ const Chatbot = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar este chat?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta acción eliminará el chat y todos sus mensajes. No se puede deshacer.
+              Esta acción eliminará el chat y todos sus mensajes. No se puede
+              deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleConfirmDelete}>
               Eliminar
             </AlertDialogAction>
           </AlertDialogFooter>

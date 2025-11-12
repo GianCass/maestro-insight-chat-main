@@ -15,25 +15,11 @@ export type RawSource = {
   source?: string;
 };
 
-// 👇 NUEVO
-export type ChatStreamPart = {
-  content?: string;
-  confidence?: number;
-  sources?: RawSource[];
-  type?: ChatIntentType;
-  items?: PriceTableItem[];
-  result?: unknown;
-  vizPrompt?: string; // <— NUEVO
-};
-
-
-
-
-
-
 export type PriceTableItem = {
+  id?: string;
   product_id?: string;
-  name: string;
+  title?: string;
+  name?: string;
   brand?: string;
   store?: string;
   price?: number;
@@ -48,7 +34,6 @@ type ApiResp = {
   content?: string;
   confidence?: number;
   sources?: RawSource[];
-  evidence?: RawSource[];
   type?: ChatIntentType;
   items?: PriceTableItem[];
   result?: unknown;
@@ -65,20 +50,26 @@ export type ChatStreamRequest = ChatRequest & {
   signal?: AbortSignal;
 };
 
-type StreamYield = {
+export type StreamEvent = {
   content?: string;
+  vizPrompt?: string;
   confidence?: number;
   sources?: RawSource[];
   type?: ChatIntentType;
   items?: PriceTableItem[];
   result?: unknown;
-  vizPrompt?: string;
 };
 
 /* ======================= Utilidades ======================= */
-export const generateSessionId = () =>
-  "sid-" + Math.random().toString(36).slice(2) + "-" + Date.now().toString(36);
 
+// Genera un id de sesión estable y legible
+export function generateSessionId(): string {
+  const t = Date.now().toString(36);
+  const r = Math.random().toString(36).slice(2, 8);
+  return `s_${t}${r}`;
+}
+
+// Historial simple en localStorage (la UI lo usa como chatHistory)
 export const chatHistory = {
   load(sessionId: string): ChatMessage[] {
     try {
@@ -103,167 +94,153 @@ export async function sendChat({
   strict,
   threshold,
 }: ChatRequest) {
-  // ⬇⬇ ESTE ES EL CAMBIO CLAVE: esperar los headers antes de usarlos
   const extraHeaders = await authHeaders();
 
   const resp = await fetch(`${getApiBase()}/chat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...extraHeaders, // ⬅ ya NO es una Promise
+      ...extraHeaders,
     },
     body: JSON.stringify({
       message,
-      session_id: sessionId,
-      strict: !!strict,
+      sessionId,
+      strict,
       threshold,
     }),
   });
 
-  if (!resp.ok) throw new Error(`HTTP ${resp.status} al llamar /chat`);
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}`);
+  }
 
   const data = (await resp.json()) as ApiResp;
-
   return {
-    message: data.message ?? data.reply ?? data.content ?? "",
+    content: data.reply ?? data.message ?? data.content ?? "",
     confidence: data.confidence,
-    sources: (data.sources ?? data.evidence) || [],
+    sources: data.sources,
     type: data.type,
     items: data.items,
     result: data.result,
   };
 }
 
-
-/* ======================= /chat/stream (SSE / ReadableStream) ======================= */
-export async function sendChatStream({
+/* ======================= /chat (stream) ======================= */
+export function streamChat({
   message,
   sessionId,
   strict,
   threshold,
   signal,
-}: ChatStreamRequest) {
-  // ⬇⬇ IGUAL: esperar los headers
-  const extraHeaders = await authHeaders();
+}: ChatStreamRequest): AsyncIterable<StreamEvent> {
+  const controller = new AbortController();
+  if (signal) signal.addEventListener("abort", () => controller.abort(), { once: true });
 
-  const resp = await fetch(`${getApiBase()}/chat/stream`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "text/event-stream",
-      ...extraHeaders, // ⬅ ya NO es una Promise
-    },
-    body: JSON.stringify({
-      message,
-      session_id: sessionId,
-      strict: !!strict,
-      threshold,
-    }),
-    signal,
-  });
+  const iterable = (async function* (): AsyncGenerator<StreamEvent, void, unknown> {
+    const extraHeaders = await authHeaders();
 
-  if (!resp.ok || !resp.body) {
-    throw new Error(
-      `No se pudo abrir el stream: HTTP ${resp.status} / body=${!!resp.body}`
-    );
-  }
+    const resp = await fetch(`${getApiBase()}/chat/stream`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...extraHeaders,
+      },
+      body: JSON.stringify({ message, sessionId, strict, threshold }),
+      signal: controller.signal,
+    });
 
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder("utf-8");
+    if (!resp.ok || !resp.body) {
+      throw new Error(`HTTP ${resp.status}: no stream body`);
+    }
 
-  let accText = "";
-  const meta: {
-    confidence?: number;
-    sources?: RawSource[];
-    type?: ChatIntentType;
-    items?: PriceTableItem[];
-    result?: unknown;
-  } = {};
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder("utf-8");
 
-  let pending = "";
-
-  return {
-    async *[Symbol.asyncIterator](): AsyncIterator<{
-      content?: string;
+    let accText = "";
+    const meta: {
       confidence?: number;
       sources?: RawSource[];
       type?: ChatIntentType;
       items?: PriceTableItem[];
       result?: unknown;
-      vizPrompt?: string;
-    }> {
-      try {
-        for (;;) {
-          const { value, done } = await reader.read();
-          if (done) break;
+    } = {};
 
-          const chunk = decoder.decode(value, { stream: true });
-          pending += chunk;
+    let pending = "";
 
-          const lines = pending.split(/\r?\n/);
-          pending = lines.pop() ?? "";
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
 
-          for (let line of lines) {
-            line = line.replace(/^data:\s*/, "").trim();
-            if (!line) continue;
+        const chunk = decoder.decode(value, { stream: true });
+        pending += chunk;
 
-            if (line.startsWith("[VIZ_PROMPT]")) {
-              const vizPrompt = line.replace(/^\[VIZ_PROMPT\]\s*/, "");
-              yield { vizPrompt };
-              continue; 
-            }
+        const lines = pending.split(/\r?\n/);
+        pending = lines.pop() ?? "";
 
-            if (line === "[FIN]" || line === "[DONE]") {
-              yield {
-                content: accText,
-                confidence: meta.confidence,
-                sources: meta.sources,
-                type: meta.type,
-                items: meta.items,
-                result: meta.result,
-              };
-              return;
-            }
+        for (const raw of lines) {
+          // NO trim: mantiene espacios significativos
+          const line = raw.replace(/^data:\s?/, "");
+          if (!line) continue;
 
-            try {
-              const j = JSON.parse(line) as Partial<ApiResp>;
-              const token =
-                j.delta ?? j.content ?? j.message ?? j.reply ?? "";
+          if (line.startsWith("[VIZ_PROMPT]")) {
+            const vizPrompt = line.replace(/^\[VIZ_PROMPT\]\s*/, "");
+            yield { vizPrompt };
+            continue;
+          }
 
-              if (token) {
-                accText += token;
-                yield { content: accText };
-              }
+          if (line === "[FIN]" || line === "[DONE]") {
+            yield {
+              content: accText,
+              confidence: meta.confidence,
+              sources: meta.sources,
+              type: meta.type,
+              items: meta.items,
+              result: meta.result,
+            };
+            return;
+          }
 
-              if (j.confidence !== undefined) meta.confidence = j.confidence;
-              if (j.sources || j.evidence)
-                meta.sources = (j.sources ?? j.evidence) ?? undefined;
-              if (j.type) meta.type = j.type;
-              if (j.items) meta.items = j.items;
-              if (j.result) meta.result = j.result;
-            } catch {
-              accText += line;
+          // Intenta JSON; si falla, trata como texto plano
+          try {
+            const j = JSON.parse(line) as Partial<ApiResp>;
+            const token = j.delta ?? j.content ?? j.message ?? j.reply ?? "";
+            if (token) {
+              accText += token;
               yield { content: accText };
-
-              if (/\[(FIN|DONE)\]\s*$/.test(line)) {
-                yield {
-                  content: accText.replace(/\s*\[(FIN|DONE)\]\s*$/, ""),
-                  confidence: meta.confidence,
-                  sources: meta.sources,
-                  type: meta.type,
-                  items: meta.items,
-                  result: meta.result,
-                };
-                return;
-              }
             }
+            if (j.confidence !== undefined) meta.confidence = j.confidence;
+            if (j.sources !== undefined) meta.sources = j.sources;
+            if (j.type !== undefined) meta.type = j.type;
+            if (j.items !== undefined) meta.items = j.items;
+            if (j.result !== undefined) meta.result = j.result;
+          } catch {
+            accText += line;
+            yield { content: accText };
           }
         }
-      } finally {
-        try {
-          reader.releaseLock();
-        } catch (_err) {
-          // ignoramos: el stream pudo cerrarse ya
+      }
+
+      // Vacía lo que quedó pendiente
+      if (pending) {
+        const line = pending.replace(/^data:\s?/, "");
+        if (line && line !== "[FIN]" && line !== "[DONE]") {
+          try {
+            const j = JSON.parse(line) as Partial<ApiResp>;
+            const token = j.delta ?? j.content ?? j.message ?? j.reply ?? "";
+            if (token) {
+              accText += token;
+              yield { content: accText };
+            }
+            if (j.confidence !== undefined) meta.confidence = j.confidence;
+            if (j.sources !== undefined) meta.sources = j.sources;
+            if (j.type !== undefined) meta.type = j.type;
+            if (j.items !== undefined) meta.items = j.items;
+            if (j.result !== undefined) meta.result = j.result;
+          } catch {
+            accText += line;
+            yield { content: accText };
+          }
         }
       }
 
@@ -275,7 +252,21 @@ export async function sendChatStream({
         items: meta.items,
         result: meta.result,
       };
-    },
-  };
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {
+        /* ignore */
+      }
+    }
+  })();
+
+  return iterable;
 }
 
+/* Wrapper con el nombre que espera tu UI */
+export async function sendChatStream(
+  args: ChatStreamRequest
+): Promise<AsyncIterable<StreamEvent>> {
+  return streamChat(args);
+}
