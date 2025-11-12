@@ -520,6 +520,7 @@ const Chatbot = () => {
         threshold: confidenceThreshold[0],
       });
       let finalAnswer = "";
+      const deltaLines: string[] = [];
       let lastVizCode: string | undefined;
       for await (const part of stream) {
         // Guardar prompt de visualización pero NO renderizar hasta el final
@@ -531,15 +532,30 @@ const Chatbot = () => {
           finalAnswer = part.content; // part.content ya es el acumulado completo (accText)
         }
 
+        // Registrar delta (si viene) para mostrarlo en una nueva línea
+        if (typeof (part as any).delta === "string" && (part as any).delta.length > 0) {
+          deltaLines.push((part as any).delta);
+        }
+
         // Actualizar el mensaje temporal del asistente con contenido (acumulado) y metadatos, sin vizCode todavía
         setMessages((prev) => {
           const next = prev.map((msg) => {
             if (msg.id !== tempAssistantId) return msg;
 
             const unifiedSources = normalizeSources(part.sources ?? msg.sources) ?? msg.sources;
+            // Mostrar cada nueva data en una nueva línea si recibimos delta; de lo contrario usar contenido acumulado
+            const deltaText = (part as any).delta as string | undefined;
+            const nextContent = typeof deltaText === "string" && deltaText.length > 0
+              ? (() => {
+                  const startsWithDash = deltaText.trimStart().startsWith("-");
+                  if (!msg.content || msg.content.length === 0) return deltaText;
+                  return msg.content + (startsWithDash ? "\n" : " ") + deltaText;
+                })()
+              : (part.content ?? msg.content);
+
             return {
               ...msg,
-              content: part.content ?? msg.content,
+              content: nextContent,
               confidence: part.confidence !== undefined ? part.confidence : msg.confidence,
               sources: unifiedSources,
               evidences: unifiedSources?.map((src) => ({
@@ -560,8 +576,21 @@ const Chatbot = () => {
         });
       }
 
-      // Finalizar: limpiar fences y ahora sí anexar la visualización
-      const cleanedAnswer = stripCodeFences(finalAnswer);
+      // Finalizar: si hubo deltas, consolidar con saltos de línea; luego limpiar fences
+      const consolidated = (() => {
+        if (deltaLines.length === 0) return finalAnswer;
+        let out = "";
+        for (const d of deltaLines) {
+          if (!out) {
+            out = d;
+          } else {
+            const startsWithDash = d.trimStart().startsWith("-");
+            out += (startsWithDash ? "\n" : " ") + d;
+          }
+        }
+        return out;
+      })();
+      const cleanedAnswer = stripCodeFences(consolidated);
       setMessages((prev) => {
         const next = prev.map((msg) => msg.id === tempAssistantId ? { ...msg, content: cleanedAnswer, vizCode: lastVizCode } : msg);
         chatHistory.save(sessionId, next);

@@ -18,6 +18,7 @@ export type RawSource = {
 // 👇 NUEVO
 export type ChatStreamPart = {
   content?: string;
+  delta?: string; // nuevo: fragmento incremental
   confidence?: number;
   sources?: RawSource[];
   type?: ChatIntentType;
@@ -67,6 +68,7 @@ export type ChatStreamRequest = ChatRequest & {
 
 type StreamYield = {
   content?: string;
+  delta?: string;
   confidence?: number;
   sources?: RawSource[];
   type?: ChatIntentType;
@@ -185,6 +187,7 @@ export async function sendChatStream({
   return {
     async *[Symbol.asyncIterator](): AsyncIterator<{
       content?: string;
+      delta?: string;
       confidence?: number;
       sources?: RawSource[];
       type?: ChatIntentType;
@@ -210,7 +213,7 @@ export async function sendChatStream({
             if (line.startsWith("[VIZ_PROMPT]")) {
               const vizPrompt = line.replace(/^\[VIZ_PROMPT\]\s*/, "");
               yield { vizPrompt };
-              continue; 
+              continue;
             }
 
             if (line === "[FIN]" || line === "[DONE]") {
@@ -232,7 +235,7 @@ export async function sendChatStream({
 
               if (token) {
                 accText += token;
-                yield { content: accText };
+                yield { content: accText, delta: token };
               }
 
               if (j.confidence !== undefined) meta.confidence = j.confidence;
@@ -243,11 +246,13 @@ export async function sendChatStream({
               if (j.result) meta.result = j.result;
             } catch {
               accText += line;
-              yield { content: accText };
+              // cuando la línea no es JSON, la consideramos un delta completo
+              yield { content: accText, delta: line };
 
               if (/\[(FIN|DONE)\]\s*$/.test(line)) {
                 yield {
                   content: accText.replace(/\s*\[(FIN|DONE)\]\s*$/, ""),
+                  delta: undefined,
                   confidence: meta.confidence,
                   sources: meta.sources,
                   type: meta.type,
@@ -269,6 +274,7 @@ export async function sendChatStream({
 
       yield {
         content: accText,
+        delta: undefined,
         confidence: meta.confidence,
         sources: meta.sources,
         type: meta.type,
