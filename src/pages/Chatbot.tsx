@@ -181,6 +181,15 @@ const stripCodeFences = (raw: string): string => {
   return cleaned.trim();
 };
 
+// Genera el título del chat a partir del primer prompt (máx 75 caracteres) y añade "..."
+const makeChatTitle = (prompt: string, max: number = 75): string => {
+  if (!prompt || !prompt.trim()) return "Conversación...";
+  // Normaliza espacios y saltos de línea a una sola línea legible
+  const singleLine = prompt.replace(/\s+/g, " ").trim();
+  const truncated = singleLine.slice(0, Math.min(max, singleLine.length));
+  return `${truncated}...`;
+};
+
 /* ======================= Componente ======================= */
 
 const Chatbot = () => {
@@ -461,8 +470,8 @@ const Chatbot = () => {
     try {
       const existingId = chatDbId ?? localStorage.getItem(`chatdb-${sessionId}`);
       if (!existingId) {
-        // Usar el primer prompt completo del usuario como título del chat
-        const title = messageText.trim() || "Conversación";
+        // Usar los primeros 75 caracteres del primer prompt como título del chat
+        const title = makeChatTitle(messageText, 75);
         const { data, error } = await (supabase as any)
           .from("chats")
           .insert({ title, user_id: user.id })
@@ -791,8 +800,10 @@ const Chatbot = () => {
                         ? 'bg-primary text-primary-foreground'
                         : 'hover:bg-primary/20 dark:hover:bg-primary/30'}`}
                   >
-                    <div className="flex items-center space-x-2">
-                      <MessageSquare className={`h-5 w-5 ${selectedChatId === c.id ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
+                    <div className="flex items-center space-x-2 min-w-0">
+                      <span className="flex-shrink-0 inline-flex items-center justify-center h-6 w-6">
+                        <MessageSquare className={`h-4 w-4 ${selectedChatId === c.id ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
+                      </span>
                       <span className="text-sm break-words whitespace-normal">{c.title || 'Conversación'}</span>
                     </div>
                     <DropdownMenu>
