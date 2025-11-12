@@ -167,6 +167,20 @@ const toAggregateResult = (
   return val as AggregateResult;
 };
 
+// Elimina fences ``` y lenguajes para almacenar sólo texto plano en Supabase
+const stripCodeFences = (raw: string): string => {
+  if (!raw) return raw;
+  // Quitar bloques triple backtick (posibles múltiples)
+  let cleaned = raw.replace(/```(?:[a-zA-Z0-9_-]+)?\n?[\s\S]*?```/g, (m) => {
+    // Extraer contenido interno sin los backticks
+    const inner = m.replace(/^```(?:[a-zA-Z0-9_-]+)?\n?/, "").replace(/```$/, "");
+    return inner.trim();
+  });
+  // También remover líneas que sólo sean ```
+  cleaned = cleaned.replace(/^```\s*$/gm, "");
+  return cleaned.trim();
+};
+
 /* ======================= Componente ======================= */
 
 const Chatbot = () => {
@@ -508,28 +522,25 @@ const Chatbot = () => {
       let finalAnswer = "";
       let lastVizCode: string | undefined;
       for await (const part of stream) {
-        // ⬇️ Si el backend envía un prompt de visualización, lo adjuntamos al mensaje del asistente
+        // Guardar prompt de visualización pero NO renderizar hasta el final
         if (part.vizPrompt) {
           lastVizCode = part.vizPrompt;
-          setMessages((prev) => prev.map((msg) => msg.id === tempAssistantId ? { ...msg, vizCode: lastVizCode } : msg));
         }
 
         if (typeof part.content === "string") {
-          finalAnswer = part.content;
+          finalAnswer = part.content; // part.content ya es el acumulado completo (accText)
         }
 
+        // Actualizar el mensaje temporal del asistente con contenido (acumulado) y metadatos, sin vizCode todavía
         setMessages((prev) => {
-          const next: UIMessage[] = prev.map((msg) => {
+          const next = prev.map((msg) => {
             if (msg.id !== tempAssistantId) return msg;
 
-            const unifiedSources =
-              normalizeSources(part.sources ?? msg.sources) ?? msg.sources;
-
-            const updated: UIMessage = {
+            const unifiedSources = normalizeSources(part.sources ?? msg.sources) ?? msg.sources;
+            return {
               ...msg,
               content: part.content ?? msg.content,
-              confidence:
-                part.confidence !== undefined ? part.confidence : msg.confidence,
+              confidence: part.confidence !== undefined ? part.confidence : msg.confidence,
               sources: unifiedSources,
               evidences: unifiedSources?.map((src) => ({
                 id: src.id,
@@ -542,29 +553,47 @@ const Chatbot = () => {
               type: part.type ?? msg.type,
               items: toProductRows(part.items) ?? msg.items,
               result: toAggregateResult(part.result) ?? msg.result,
-            };
-
-            return updated;
+            } as UIMessage;
           });
-
           chatHistory.save(sessionId, next);
           return next;
         });
       }
 
+      // Finalizar: limpiar fences y ahora sí anexar la visualización
+      const cleanedAnswer = stripCodeFences(finalAnswer);
+      setMessages((prev) => {
+        const next = prev.map((msg) => msg.id === tempAssistantId ? { ...msg, content: cleanedAnswer, vizCode: lastVizCode } : msg);
+        chatHistory.save(sessionId, next);
+        return next;
+      });
+
       // Guardar el mensaje en Supabase una vez que termina el stream
       try {
         const chatId = chatDbId ?? localStorage.getItem(`chatdb-${sessionId}`);
         if (chatId) {
-          await (supabase as any)
-            .from("messages")
-            .insert({
-              prompt: messageText,
-              respuesta: finalAnswer || "",
-              intencion: "-",
-              visualizacion: lastVizCode ?? "-",
-              chat_id: chatId,
-            });
+          const payload = {
+            prompt: messageText,
+            respuesta: cleanedAnswer || "",
+            intencion: "-",
+            visualizacion: lastVizCode ?? "-",
+            chat_id: chatId,
+          };
+          let saved = false;
+          for (let attempt = 1; attempt <= 3 && !saved; attempt++) {
+            const { error } = await (supabase as any).from("messages").insert(payload);
+            if (!error) {
+              saved = true;
+              console.log(`Mensaje guardado en Supabase (intento ${attempt})`);
+            } else {
+              console.warn(`Fallo guardando mensaje (intento ${attempt}):`, error);
+              // Pequeño backoff progresivo
+              await new Promise((r) => setTimeout(r, 250 * attempt));
+            }
+          }
+          if (!saved) {
+            console.error("No se pudo guardar el mensaje tras reintentos");
+          }
         } else {
           console.warn("No se encontró chat_id para guardar el mensaje");
         }
