@@ -547,9 +547,11 @@ const Chatbot = () => {
             const deltaText = (part as any).delta as string | undefined;
             const nextContent = typeof deltaText === "string" && deltaText.length > 0
               ? (() => {
-                  const startsWithDash = deltaText.trimStart().startsWith("-");
+                  const t = deltaText.trimStart();
+                  const first = t.charAt(0);
+                  const breakLine = first === '-' || first === '{' || first === '}';
                   if (!msg.content || msg.content.length === 0) return deltaText;
-                  return msg.content + (startsWithDash ? "\n" : " ") + deltaText;
+                  return msg.content + (breakLine ? "\n" : " ") + deltaText;
                 })()
               : (part.content ?? msg.content);
 
@@ -584,8 +586,10 @@ const Chatbot = () => {
           if (!out) {
             out = d;
           } else {
-            const startsWithDash = d.trimStart().startsWith("-");
-            out += (startsWithDash ? "\n" : " ") + d;
+            const t = d.trimStart();
+            const first = t.charAt(0);
+            const breakLine = first === '-' || first === '{' || first === '}';
+            out += (breakLine ? "\n" : " ") + d;
           }
         }
         return out;
