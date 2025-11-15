@@ -181,6 +181,58 @@ const stripCodeFences = (raw: string): string => {
   return cleaned.trim();
 };
 
+// Reemplaza bloques delimitados por '~' por doble salto de línea y elimina espacios adyacentes
+const replaceTildeBlocks = (text: string): string => {
+  if (!text) return text;
+  let out = text.replace(/\s*~+\s*/g, "\n\n");
+  // Evitar más de dos saltos seguidos
+  out = out.replace(/\n{3,}/g, "\n\n");
+  return out;
+};
+
+// Normaliza espacios tras punto/coma: conserva decimales pegados y pone espacio ante letras
+const fixPunctuationSpaces = (text: string): string => {
+  if (!text) return text;
+  let out = text;
+  // Unir números con punto/coma y decimales: "12. 345" -> "12.345", "9 ,876" -> "9,876"
+  out = out.replace(/(\d)\s*([.,])\s*(\d)/g, "$1$2$3");
+  // Asegurar un espacio si tras punto o coma viene una letra (mayús/minús): ".a" -> ". a", ",b" -> ", b"
+  out = out.replace(/([.,])\s*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ])/g, "$1 $2");
+  return out;
+};
+
+// Anexa fragmentos del stream con reglas inteligentes de espacio/salto de línea
+const smartAppend = (prev: string, next: string, breakLine: boolean): string => {
+  if (!prev) return next;
+  if (!next) return prev;
+  if (breakLine) return prev + "\n" + next;
+  const m = prev.match(/([^\s])\s*$/);
+  const last = m ? m[1] : "";
+  const t = next.replace(/^\s+/, "");
+  const first = t.charAt(0);
+
+  // Si lo siguiente empieza con salto de línea, no agregues espacio antes
+  if (t.startsWith("\n")) {
+    return prev.replace(/\s+$/, "") + t;
+  }
+
+  let needSpace = true;
+  if (!last) needSpace = false;
+  // Regla 1: tras punto/coma y antes de dígito -> sin espacio (decimales). Si es letra, con espacio.
+  if (last === "." || last === ",") {
+    if (/^\d/.test(first)) needSpace = false;
+    else needSpace = true;
+  }
+  // Regla 2: dentro de números (123, 45) o (12 .34) -> sin espacio
+  if (/^\d$/.test(last) && (/^[\.,]/.test(first) || /^\d$/.test(first))) {
+    needSpace = false;
+  }
+  // Regla 3: si el siguiente comienza con puntuación que se adhiere, evita espacio
+  if (/^[\.,;:!\?\)\]\}]/.test(first)) needSpace = false;
+
+  return prev + (needSpace ? " " : "") + next;
+};
+
 // Genera el título del chat a partir del primer prompt (máx 75 caracteres) y añade "..."
 const makeChatTitle = (prompt: string, max: number = 75): string => {
   if (!prompt || !prompt.trim()) return "Conversación...";
@@ -219,6 +271,8 @@ const Chatbot = () => {
   const [retryRequest, setRetryRequest] = useState<{ message: string } | null>(
     null
   );
+  // Velocidad de streaming (1=lento,5=rápido). Permite suavizar la animación.
+  const [streamingSpeed, setStreamingSpeed] = useState<number>(3);
 
   // Visualizaciones ahora se renderizan por mensaje con PlotlyRemoteChart
   // Emoji del usuario autenticado para el avatar de mensajes del lado derecho
@@ -466,6 +520,107 @@ const Chatbot = () => {
       return;
     }
 
+
+      // Cola de tokens para drenaje progresivo con batching suave
+      const tokenQueueRef = { current: [] as string[] };
+      let draining = false;
+      // Perfiles de delay según velocidad (ms): más lento = mayor tiempo
+      const DELAY_PRESETS: Record<number, number[]> = {
+        1: [150,160,170,180],
+        2: [120,130,140,150],
+        3: [95,105,115,125],
+        4: [75,85,95,105],
+        5: [55,65,75,85]
+      };
+      const ACTIVE_DELAYS = DELAY_PRESETS[streamingSpeed] || DELAY_PRESETS[3];
+      const nextDelay = () => ACTIVE_DELAYS[Math.floor(Math.random() * ACTIVE_DELAYS.length)];
+      // Tamaño objetivo de caracteres por batch (más velocidad => batch más grande)
+      const BATCH_CHAR_TARGET: Record<number, number> = { 1: 8, 2: 12, 3: 16, 4: 22, 5: 28 };
+      const targetBatchChars = BATCH_CHAR_TARGET[streamingSpeed] || 16;
+
+      // Tokeniza fusionando espacios con la siguiente palabra para evitar parpadeo de "tokens vacíos"
+      const splitIntoTokens = (text: string): string[] => {
+        if (!text) return [];
+        const raw = text.split(/(\n+|\s+)/g).filter(p => p.length > 0);
+        const tokens: string[] = [];
+        for (let i = 0; i < raw.length; i++) {
+          const t = raw[i];
+            // Si son sólo espacios
+          if (/^\s+$/.test(t)) {
+            if (i + 1 < raw.length && !/^\n+$/.test(raw[i+1])) {
+              raw[i+1] = t + raw[i+1]; // fusionar espacio con palabra siguiente
+            } else {
+              tokens.push(t); // dejar espacio aislado (seguido de newline)
+            }
+          } else {
+            tokens.push(t);
+          }
+        }
+        return tokens;
+      };
+
+      const drainTokens = (assistantId: string) => {
+        if (draining) return;
+        draining = true;
+        const step = () => {
+          if (tokenQueueRef.current.length === 0) {
+            if (isStreaming) {
+              setTimeout(step, nextDelay());
+            } else {
+              draining = false;
+            }
+            return;
+          }
+          // Construir batch de tokens hasta alcanzar umbral de caracteres o encontrar salto de línea
+          let batch = '';
+          let breakLineForced = false;
+          while (tokenQueueRef.current.length > 0) {
+            const peek = tokenQueueRef.current[0];
+            if (/^\n+$/.test(peek)) {
+              if (batch.length === 0) {
+                batch = tokenQueueRef.current.shift() as string;
+                breakLineForced = true;
+              }
+              break;
+            }
+            batch += tokenQueueRef.current.shift();
+            if (batch.length >= targetBatchChars) break;
+          }
+          const rawToken = batch;
+          setMessages((prev) => {
+            const next = prev.map((msg) => {
+              if (msg.id !== assistantId) return msg;
+              let content = msg.content || '';
+              if (/^\n+$/.test(rawToken)) {
+                content = content.replace(/\s+$/, '') + rawToken; // evitar espacio antes de newline
+                return { ...msg, content };
+              }
+              // Reemplazar tildes residuales
+              const cleaned = rawToken.replace(/\s*~+\s*/g, '\n\n');
+              const breakLine = breakLineForced || /^[-{}]/.test(cleaned.trimStart());
+              content = smartAppend(content, cleaned, breakLine);
+              return { ...msg, content };
+            });
+            chatHistory.save(sessionId, next);
+            return next;
+          });
+          setTimeout(step, nextDelay());
+        };
+        step();
+      };
+
+      // Esperar a que termine de drenarse la cola antes de fijar el contenido final
+      const waitForDrain = (): Promise<void> =>
+        new Promise((resolve) => {
+          const check = () => {
+            if (tokenQueueRef.current.length === 0 && !draining) {
+              resolve();
+            } else {
+              setTimeout(check, 20);
+            }
+          };
+          check();
+        });
     // Crear registro del chat en Supabase al primer mensaje si aún no existe
     try {
       const existingId = chatDbId ?? localStorage.getItem(`chatdb-${sessionId}`);
@@ -541,32 +696,45 @@ const Chatbot = () => {
           finalAnswer = part.content; // part.content ya es el acumulado completo (accText)
         }
 
-        // Registrar delta (si viene) para mostrarlo en una nueva línea
+        // Registrar delta para consolidación final y tokenizado para impresión incremental
+        // Si no viene delta, derivar delta desde part.content acumulado
+        // Control de texto ya encolado para evitar duplicados
+        // Nota: usamos cierre sobre enqueuedTotal
+        if (!('enqueuedTotal' in (drainTokens as any))) {
+          (drainTokens as any).enqueuedTotal = 0 as number;
+        }
+        const getEnqueuedTotal = () => (drainTokens as any).enqueuedTotal as number;
+        const setEnqueuedTotal = (v: number) => ((drainTokens as any).enqueuedTotal = v);
+
         if (typeof (part as any).delta === "string" && (part as any).delta.length > 0) {
-          deltaLines.push((part as any).delta);
+          const rawDelta = (part as any).delta as string;
+          deltaLines.push(rawDelta);
+          const prepared = replaceTildeBlocks(rawDelta);
+          const tokens = splitIntoTokens(prepared);
+          tokenQueueRef.current.push(...tokens);
+          setEnqueuedTotal(getEnqueuedTotal() + rawDelta.length);
+          drainTokens(tempAssistantId);
+        } else if (typeof part.content === 'string') {
+          const contentStr = part.content;
+          const already = getEnqueuedTotal();
+          if (contentStr.length > already) {
+            const rawDeltaFromContent = contentStr.slice(already);
+            deltaLines.push(rawDeltaFromContent);
+            const prepared = replaceTildeBlocks(rawDeltaFromContent);
+            const tokens = splitIntoTokens(prepared);
+            tokenQueueRef.current.push(...tokens);
+            setEnqueuedTotal(contentStr.length);
+            drainTokens(tempAssistantId);
+          }
         }
 
-        // Actualizar el mensaje temporal del asistente con contenido (acumulado) y metadatos, sin vizCode todavía
+        // Actualizar metadatos (confidence, sources, etc.) sin tocar contenido acumulado aquí
         setMessages((prev) => {
           const next = prev.map((msg) => {
             if (msg.id !== tempAssistantId) return msg;
-
             const unifiedSources = normalizeSources(part.sources ?? msg.sources) ?? msg.sources;
-            // Mostrar cada nueva data en una nueva línea si recibimos delta; de lo contrario usar contenido acumulado
-            const deltaText = (part as any).delta as string | undefined;
-            const nextContent = typeof deltaText === "string" && deltaText.length > 0
-              ? (() => {
-                  const t = deltaText.trimStart();
-                  const first = t.charAt(0);
-                  const breakLine = first === '-' || first === '{' || first === '}';
-                  if (!msg.content || msg.content.length === 0) return deltaText;
-                  return msg.content + (breakLine ? "\n" : " ") + deltaText;
-                })()
-              : (part.content ?? msg.content);
-
             return {
               ...msg,
-              content: nextContent,
               confidence: part.confidence !== undefined ? part.confidence : msg.confidence,
               sources: unifiedSources,
               evidences: unifiedSources?.map((src) => ({
@@ -591,21 +759,33 @@ const Chatbot = () => {
       const consolidated = (() => {
         if (deltaLines.length === 0) return finalAnswer;
         let out = "";
-        for (const d of deltaLines) {
+        for (let d of deltaLines) {
+          d = replaceTildeBlocks(d);
           if (!out) {
             out = d;
           } else {
             const t = d.trimStart();
             const first = t.charAt(0);
             const breakLine = first === '-' || first === '{' || first === '}';
-            out += (breakLine ? "\n" : " ") + d;
+            // Si el bloque ya comienza con salto de línea, no anteponer espacio ni salto extra
+            if (t.startsWith("\n")) {
+              out = out.replace(/\s+$/, "") + d;
+            } else {
+              out += (breakLine ? "\n" : " ") + d;
+            }
           }
         }
         return out;
       })();
       const cleanedAnswer = stripCodeFences(consolidated);
+      const normalizedAnswer = fixPunctuationSpaces(cleanedAnswer);
+      // Esperar a que se termine de imprimir palabra por palabra
+      await waitForDrain();
+      // Limpiar por si quedó algo residual (no debería después de esperar)
+      tokenQueueRef.current = [];
+      draining = false;
       setMessages((prev) => {
-        const next = prev.map((msg) => msg.id === tempAssistantId ? { ...msg, content: cleanedAnswer, vizCode: lastVizCode } : msg);
+        const next = prev.map((msg) => msg.id === tempAssistantId ? { ...msg, content: normalizedAnswer, vizCode: lastVizCode } : msg);
         chatHistory.save(sessionId, next);
         return next;
       });
@@ -616,7 +796,7 @@ const Chatbot = () => {
         if (chatId) {
           const payload = {
             prompt: messageText,
-            respuesta: cleanedAnswer || "",
+            respuesta: normalizedAnswer || "",
             intencion: "-",
             visualizacion: lastVizCode ?? "-",
             chat_id: chatId,
