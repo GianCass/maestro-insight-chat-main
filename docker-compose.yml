@@ -1,0 +1,15 @@
+version: "3.9"
+
+services:
+  frontend:
+    build:
+      context: .
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_BACKENDVISUAL_URL: ${VITE_BACKENDVISUAL_URL:-http://localhost:8007}
+    container_name: frontend
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
