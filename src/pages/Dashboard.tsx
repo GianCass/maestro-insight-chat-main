@@ -143,14 +143,6 @@ const Dashboard = () => {
     navigate('/chatbot');
   };
 
-  // Mock data
-  const kpiData = {
-    totalQueries: 15427,
-    noDataPercentage: 12.3,
-    averageLatency: 245,
-    p95Latency: 1200,
-    evidenceClickthrough: 34.7
-  };
 
   // User hourly queries (today) aggregated in 4-hour bins
   type HourBin = { time: string; queries: number };
@@ -175,7 +167,6 @@ const Dashboard = () => {
           return;
         }
 
-        // Today (local) from 00:00:00
         const start = new Date();
         start.setHours(0, 0, 0, 0);
 
@@ -205,13 +196,6 @@ const Dashboard = () => {
     loadHourly();
   }, [user?.id]);
 
-  const intentData = [
-    { intent: 'Consulta Precios', count: 4500, percentage: 35 },
-    { intent: 'Análisis Mercado', count: 3200, percentage: 25 },
-    { intent: 'Comparar Productos', count: 2800, percentage: 22 },
-    { intent: 'Tendencias', count: 1500, percentage: 12 },
-    { intent: 'Otros', count: 800, percentage: 6 }
-  ];
 
   const productData = [
     { product: 'Pan de molde', queries: 229, relevance: 11.28 },
@@ -489,8 +473,7 @@ const Dashboard = () => {
         if (totalErr) throw totalErr;
 
         // Count fallback "no info" responses with accent/spacing/punctuation variants.
-        // We use ILIKE with wildcards to match both "informacion" and "información",
-        // and any trailing punctuation.
+        // We use ILIKE with wildcards to match both "informacion" and "información"
         const { count: fallbackCount, error: fbErr } = await (supabase as any)
           .from('messages')
           .select('id', { count: 'exact', head: true })

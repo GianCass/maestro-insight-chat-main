@@ -3,7 +3,6 @@ import { Brain } from "lucide-react";
 import { Link } from "react-router-dom";
 import logoImage from "@/image/logo1.png";
 
-// ... existing code ...
 
 const Footer = () => {
   return (
@@ -75,7 +74,6 @@ const Footer = () => {
   );
 };
 
-// ... existing code ...
 
 export default Footer;
 

@@ -87,7 +87,6 @@ const Landing = () => {
           style={{ backgroundImage: `url(${landingImage})` }}
         ></div>
 
-        {/* Capa oscura semitransparente para mejorar contraste */}
         <div className="absolute inset-0 bg-black/40"></div>
         <div className="container mx-auto text-center relative z-10">
           <Badge variant="secondary" className="mb-6 text-sm px-4 py-2">

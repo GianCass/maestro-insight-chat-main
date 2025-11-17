@@ -55,7 +55,6 @@ class AuthService {
     }
 
     // Supabase edge case: if the email already exists but is unconfirmed,
-    // signUp may succeed but return a user with empty identities array.
     // Treat this as "already registered" to block duplicate registrations.
     const identitiesLen = (data as any)?.user?.identities?.length;
     if (typeof identitiesLen === 'number' && identitiesLen === 0) {
@@ -90,7 +89,6 @@ class AuthService {
   }
 
   isAuthenticated(): boolean {
-    // This will be determined by the auth state in components
     return false;
   }
 }

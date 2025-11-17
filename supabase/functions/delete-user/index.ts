@@ -1,7 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.42.6";
 
-// Declare Deno to avoid TS errors in non-Deno tooling; Deno provides this at runtime.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 declare const Deno: any;
 
@@ -22,7 +21,6 @@ serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  // Use standard Supabase env var names inside Edge Functions
   const supabaseUrl = Deno.env.get("SUPABASE_URL")
     || Deno.env.get("VITE_SUPABASE_URL")
     || Deno.env.get("URL");

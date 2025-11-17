@@ -15,16 +15,15 @@ export type RawSource = {
   source?: string;
 };
 
-// 👇 NUEVO
 export type ChatStreamPart = {
   content?: string;
-  delta?: string; // nuevo: fragmento incremental
+  delta?: string;
   confidence?: number;
   sources?: RawSource[];
   type?: ChatIntentType;
   items?: PriceTableItem[];
   result?: unknown;
-  vizPrompt?: string; // <— NUEVO
+  vizPrompt?: string;
 };
 
 
@@ -105,14 +104,13 @@ export async function sendChat({
   strict,
   threshold,
 }: ChatRequest) {
-  // ⬇⬇ ESTE ES EL CAMBIO CLAVE: esperar los headers antes de usarlos
   const extraHeaders = await authHeaders();
 
   const resp = await fetch(`${getApiBase()}/chat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      ...extraHeaders, // ⬅ ya NO es una Promise
+      ...extraHeaders,
     },
     body: JSON.stringify({
       message,
@@ -145,7 +143,6 @@ export async function sendChatStream({
   threshold,
   signal,
 }: ChatStreamRequest) {
-  // ⬇⬇ IGUAL: esperar los headers
   const extraHeaders = await authHeaders();
 
   const resp = await fetch(`${getApiBase()}/chat/stream`, {
@@ -153,7 +150,7 @@ export async function sendChatStream({
     headers: {
       "Content-Type": "application/json",
       Accept: "text/event-stream",
-      ...extraHeaders, // ⬅ ya NO es una Promise
+      ...extraHeaders,
     },
     body: JSON.stringify({
       message,

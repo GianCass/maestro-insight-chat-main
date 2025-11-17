@@ -20,10 +20,7 @@ function computeApiBase(): string {
   }
   // Try URL validation, else fallback to default
   try {
-    // Also fix accidental 127/0.0.1 to 127.0.0.1
     base = base.replace("127/0.0.1", "127.0.0.1");
-    // Throws if invalid
-    // eslint-disable-next-line no-new
     new URL(base);
     return base;
   } catch {

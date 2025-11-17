@@ -48,7 +48,6 @@ const Settings = () => {
   const [emojiOptions] = useState<string[]>(DEFAULT_EMOJIS); // lista fija de emojis
   const [loadingEmojis, setLoadingEmojis] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  // perfiles are fixed options (economista, mercadologo, asesor)
 
   // Mensajes/consultas recientes del usuario
   type RecentMsg = { id: string; prompt: string | null; respuesta: string | null; created_at: string; chat_id: string };
@@ -171,7 +170,6 @@ const Settings = () => {
 
     setSaving(true);
     try {
-      // 1) First, persist profile changes so when auth emits a change, the re-fetch sees updated data
       if (displayName || emoji || perfilInteres) {
         const { error: upsertErr } = await (supabase as any)
           .from("profiles")
@@ -187,7 +185,6 @@ const Settings = () => {
         if (upsertErr) throw upsertErr;
       }
 
-      // 2) Then update auth metadata/password (this can trigger auth state change)
       if (displayName || newPassword) {
         const { error: updErr } = await supabase.auth.updateUser({
           data: displayName ? { name: displayName } : undefined,
@@ -199,7 +196,7 @@ const Settings = () => {
       toast({ title: "Datos guardados", description: "Tu perfil ha sido actualizado." });
       setNewPassword("");
       setConfirmPassword("");
-      await new Promise((resolve) => setTimeout(resolve, 500)); // pequeña espera
+      await new Promise((resolve) => setTimeout(resolve, 500));
         const { data: updatedProfile } = await (supabase as any)
         .from("profiles")
         .select("profile_emoji")
@@ -231,7 +228,7 @@ const Settings = () => {
     setDeleting(true);
     try {
       // Invocar función edge: elimina profile y auth.user (requiere SERVICE_ROLE en la función)
-      // No enviamos headers manuales: supabase-js adjunta el Authorization automáticamente
+      // supabase-js adjunta el Authorization automáticamente
       const { data, error: fnErr } = await supabase.functions.invoke("delete-user-task", {
         // Enviar body vacío garantiza POST con application/json
         body: {},

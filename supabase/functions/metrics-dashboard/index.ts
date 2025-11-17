@@ -37,7 +37,6 @@ serve(async (req: Request) => {
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
 
   try {
-    // Optional: ensure the caller is authenticated
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -46,7 +45,6 @@ serve(async (req: Request) => {
       });
     }
 
-    // Compute UTC day boundaries for today and yesterday
     const now = new Date();
     const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
     const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);

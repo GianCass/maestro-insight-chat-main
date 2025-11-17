@@ -88,7 +88,6 @@ type UISource = {
   source?: string;
 };
 
-// Mensaje enriquecido para el front
 // Omitimos 'sources', 'items' y 'result' del ChatMessage base para tiparlos a la medida de la UI
 type UIMessage = Omit<ChatMessage, "sources" | "items" | "result"> & {
   sources?: UISource[];
@@ -163,11 +162,10 @@ const toAggregateResult = (
   if (!val || typeof val !== "object") return undefined;
   const obj = val as { groups?: unknown };
   if (!Array.isArray(obj.groups)) return undefined;
-  // Si tu AggregateResult exige otras props, añádelas aquí como guards.
   return val as AggregateResult;
 };
 
-// Elimina fences ``` y lenguajes para almacenar sólo texto plano en Supabase
+
 const stripCodeFences = (raw: string): string => {
   if (!raw) return raw;
   // Quitar bloques triple backtick (posibles múltiples)
@@ -176,7 +174,6 @@ const stripCodeFences = (raw: string): string => {
     const inner = m.replace(/^```(?:[a-zA-Z0-9_-]+)?\n?/, "").replace(/```$/, "");
     return inner.trim();
   });
-  // También remover líneas que sólo sean ```
   cleaned = cleaned.replace(/^```\s*$/gm, "");
   return cleaned.trim();
 };
@@ -190,7 +187,7 @@ const replaceTildeBlocks = (text: string): string => {
   return out;
 };
 
-// Normaliza espacios tras punto/coma: conserva decimales pegados y pone espacio ante letras
+
 const fixPunctuationSpaces = (text: string): string => {
   if (!text) return text;
   let out = text;
@@ -211,7 +208,6 @@ const smartAppend = (prev: string, next: string, breakLine: boolean): string => 
   const t = next.replace(/^\s+/, "");
   const first = t.charAt(0);
 
-  // Si lo siguiente empieza con salto de línea, no agregues espacio antes
   if (t.startsWith("\n")) {
     return prev.replace(/\s+$/, "") + t;
   }
@@ -233,10 +229,10 @@ const smartAppend = (prev: string, next: string, breakLine: boolean): string => 
   return prev + (needSpace ? " " : "") + next;
 };
 
-// Genera el título del chat a partir del primer prompt (máx 75 caracteres) y añade "..."
+// Genera el título del chat a partir del primer prompt (máx 75 caracteres)
 const makeChatTitle = (prompt: string, max: number = 75): string => {
   if (!prompt || !prompt.trim()) return "Conversación...";
-  // Normaliza espacios y saltos de línea a una sola línea legible
+  // Normaliza espacios y saltos de línea a una sola línea
   const singleLine = prompt.replace(/\s+/g, " ").trim();
   const truncated = singleLine.slice(0, Math.min(max, singleLine.length));
   return `${truncated}...`;
@@ -381,7 +377,6 @@ const Chatbot = () => {
     setSelectedChatId(chatId);
     try { localStorage.setItem('last-chat-id', chatId); } catch {}
     try {
-      // Persist mapping a esta sesión
       setChatDbId(chatId);
       try { localStorage.setItem(`chatdb-${sessionId}`, chatId); } catch {}
 
@@ -521,10 +516,8 @@ const Chatbot = () => {
     }
 
 
-      // Cola de tokens para drenaje progresivo con batching suave
       const tokenQueueRef = { current: [] as string[] };
       let draining = false;
-      // Perfiles de delay según velocidad (ms): más lento = mayor tiempo
       const DELAY_PRESETS: Record<number, number[]> = {
         1: [150,160,170,180],
         2: [120,130,140,150],
@@ -538,7 +531,7 @@ const Chatbot = () => {
       const BATCH_CHAR_TARGET: Record<number, number> = { 1: 8, 2: 12, 3: 16, 4: 22, 5: 28 };
       const targetBatchChars = BATCH_CHAR_TARGET[streamingSpeed] || 16;
 
-      // Tokeniza fusionando espacios con la siguiente palabra para evitar parpadeo de "tokens vacíos"
+      // Tokeniza fusionando espacios con la siguiente palabra para evitar "tokens vacíos"
       const splitIntoTokens = (text: string): string[] => {
         if (!text) return [];
         const raw = text.split(/(\n+|\s+)/g).filter(p => p.length > 0);
@@ -595,7 +588,7 @@ const Chatbot = () => {
                 content = content.replace(/\s+$/, '') + rawToken; // evitar espacio antes de newline
                 return { ...msg, content };
               }
-              // Reemplazar tildes residuales
+              // Reemplazar tildes
               const cleaned = rawToken.replace(/\s*~+\s*/g, '\n\n');
               const breakLine = breakLineForced || /^[-{}]/.test(cleaned.trimStart());
               content = smartAppend(content, cleaned, breakLine);
@@ -809,7 +802,6 @@ const Chatbot = () => {
               console.log(`Mensaje guardado en Supabase (intento ${attempt})`);
             } else {
               console.warn(`Fallo guardando mensaje (intento ${attempt}):`, error);
-              // Pequeño backoff progresivo
               await new Promise((r) => setTimeout(r, 250 * attempt));
             }
           }
@@ -921,7 +913,6 @@ const Chatbot = () => {
     </Accordion>
   );
 
-  // Generación manual de gráficos movida a render por mensaje
 
   return (
     <div className="min-h-screen bg-background">
